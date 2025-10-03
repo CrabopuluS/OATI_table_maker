@@ -17,6 +17,12 @@ const MOSCOW_DISTRICT_ABBREVIATIONS = Object.freeze({
   'троицкий и новомосковский административный округ': 'ТиНАО',
 });
 
+const MOSCOW_DISTRICT_ABBREVIATION_KEYS = new Set(
+  Object.values(MOSCOW_DISTRICT_ABBREVIATIONS).map((value) => value.trim().toLowerCase()),
+);
+
+const DISTRICT_FALLBACK_KEY = 'без округа';
+
 const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
   { key: 'status', label: 'Статус нарушения', candidates: ['статус нарушения', 'статус'] },
@@ -536,14 +542,79 @@ function normalizeDistrictKey(value) {
   return withoutCityMention.replace(/\s+/g, ' ').trim();
 }
 
+function buildDistrictLookup(objectRecords, objectDistrictColumn, violationRecords, violationDistrictColumn) {
+  const lookup = new Map();
+
+  const registerValue = (rawValue) => {
+    const label = getValueAsString(rawValue);
+    const normalizedKey = normalizeDistrictKey(label);
+    const key = normalizedKey || DISTRICT_FALLBACK_KEY;
+    if (!key) {
+      return;
+    }
+    const displayLabel = normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа';
+    if (!lookup.has(key)) {
+      lookup.set(key, displayLabel);
+      return;
+    }
+    const current = lookup.get(key);
+    if (shouldReplaceDistrictLabel(current, displayLabel)) {
+      lookup.set(key, displayLabel);
+    }
+  };
+
+  const registerFromRecords = (records, column) => {
+    if (!column) {
+      return;
+    }
+    for (const record of records) {
+      registerValue(record[column]);
+    }
+  };
+
+  registerFromRecords(objectRecords, objectDistrictColumn);
+  registerFromRecords(violationRecords, violationDistrictColumn);
+
+  return lookup;
+}
+
+function shouldReplaceDistrictLabel(current, candidate) {
+  if (!candidate || candidate === current) {
+    return false;
+  }
+  if (!current) {
+    return true;
+  }
+  const currentKey = normalizeDistrictKey(current);
+  const candidateKey = normalizeDistrictKey(candidate);
+  const currentIsAbbreviation = MOSCOW_DISTRICT_ABBREVIATION_KEYS.has(currentKey);
+  const candidateIsAbbreviation = MOSCOW_DISTRICT_ABBREVIATION_KEYS.has(candidateKey);
+  if (candidateIsAbbreviation && !currentIsAbbreviation) {
+    return true;
+  }
+  if (!candidateIsAbbreviation && currentIsAbbreviation) {
+    return false;
+  }
+  return candidate.length < current.length;
+}
+
+// Пример использования: buildDistrictLookup([{ district: 'Центральный административный округ' }], 'district', [], 'district');
+
 function buildReport(periods) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
   const typePredicate = createTypePredicate();
   const districtData = new Map();
+  const districtLookup = buildDistrictLookup(
+    state.objects,
+    objectMapping.district,
+    state.violations,
+    violationMapping.district,
+  );
   const ensureEntry = (label) => {
-    const displayLabel = getDistrictDisplayLabel(label);
-    const key = normalizeKey(displayLabel) || 'без округа';
+    const normalizedKey = normalizeDistrictKey(label);
+    const key = normalizedKey || DISTRICT_FALLBACK_KEY;
+    const displayLabel = districtLookup.get(key) ?? (normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа');
     if (!districtData.has(key)) {
       districtData.set(key, {
         label: displayLabel,
