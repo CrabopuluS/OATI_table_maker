@@ -163,7 +163,8 @@ select {
   gap: 1rem;
 }
 
-#refresh-report {
+#refresh-report,
+#download-report {
   background: var(--accent-color);
   color: #ffffff;
   border: none;
@@ -171,10 +172,34 @@ select {
   border-radius: 10px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#refresh-report {
+  background: var(--accent-color);
 }
 
 #refresh-report:hover {
   background: var(--accent-hover);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+#download-report {
+  background: #1f2937;
+}
+
+#download-report:hover {
+  background: #111827;
+}
+
+#download-report:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: #94a3b8;
 }
 
 .table-wrapper {

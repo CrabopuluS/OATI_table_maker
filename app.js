@@ -49,6 +49,8 @@ const state = {
   customTypes: [],
   availableTypes: [],
   availableDates: [],
+  lastReport: null,
+  lastPeriods: null,
 };
 
 const elements = {
@@ -68,6 +70,7 @@ const elements = {
   previewMessage: document.getElementById('preview-message'),
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
+  downloadButton: document.getElementById('download-report'),
 };
 
 const numberFormatter = new Intl.NumberFormat('ru-RU');
@@ -96,6 +99,14 @@ if (elements.objectsInput) {
 if (elements.refreshButton) {
   elements.refreshButton.addEventListener('click', () => {
     updatePreview();
+  });
+}
+
+if (elements.downloadButton) {
+  elements.downloadButton.addEventListener('click', () => {
+    if (state.lastReport && state.lastPeriods) {
+      exportReportToExcel(state.lastReport, state.lastPeriods);
+    }
   });
 }
 
@@ -447,7 +458,22 @@ function handleTypeSelection(checkbox) {
   updatePreview();
 }
 
+function setExportAvailability(isEnabled) {
+  if (!elements.downloadButton) {
+    return;
+  }
+  elements.downloadButton.disabled = !isEnabled;
+  elements.downloadButton.setAttribute('aria-disabled', String(!isEnabled));
+}
+
+function resetExportState() {
+  state.lastReport = null;
+  state.lastPeriods = null;
+  setExportAvailability(false);
+}
+
 function updatePreview() {
+  resetExportState();
   if (!(state.violations.length && state.objects.length)) {
     showPreviewMessage('Загрузите оба файла, чтобы получить отчет.');
     clearTable();
@@ -475,7 +501,10 @@ function updatePreview() {
     return;
   }
   showPreviewMessage('');
+  state.lastReport = report;
+  state.lastPeriods = periods;
   renderReportTable(report, periods);
+  setExportAvailability(true);
 }
 
 function isMappingComplete(mapping, definitions) {
@@ -1005,4 +1034,237 @@ function formatPercent(value) {
     return '0';
   }
   return value.toFixed(1);
+}
+
+function exportReportToExcel(report, periods) {
+  try {
+    const headers = buildTableHeaders(periods);
+    const columnCount = headers.length;
+    const aoa = [];
+
+    const title = 'Итоговая таблица по объектам контроля ОАТИ';
+    const typeDescription = state.typeMode === 'custom' && state.customTypes.length
+      ? `Выбранные типы объектов: ${state.customTypes.join(', ')}`
+      : 'Все типы объектов контроля';
+
+    aoa.push([title]);
+    aoa.push(['Отчётный период', formatPeriodRange(periods.current)]);
+    aoa.push(['Предыдущий период', formatPeriodRange(periods.previous)]);
+    aoa.push([typeDescription]);
+    aoa.push([]);
+
+    const headerRowIndex = aoa.length;
+    aoa.push(headers);
+    const dataStartRow = aoa.length;
+    for (const row of report.rows) {
+      aoa.push(buildExportDataRow(row));
+    }
+    aoa.push(buildExportDataRow(report.totalRow));
+    const totalRowIndex = aoa.length - 1;
+
+    const sheet = XLSX.utils.aoa_to_sheet(aoa);
+    sheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: columnCount - 1 } },
+      { s: { r: 1, c: 1 }, e: { r: 1, c: columnCount - 1 } },
+      { s: { r: 2, c: 1 }, e: { r: 2, c: columnCount - 1 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: columnCount - 1 } },
+    ];
+    sheet['!cols'] = headers.map((_, index) => ({
+      wch: index === 0 ? 28 : 18,
+    }));
+
+    const borderColor = 'FFCBD5F5';
+    const headerStyle = {
+      font: { bold: true, color: { rgb: 'FFFFFFFF' } },
+      fill: { fgColor: { rgb: 'FF1D4ED8' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: buildBorderStyle(borderColor),
+    };
+    const titleStyle = {
+      font: { bold: true, sz: 16, color: { rgb: 'FFFFFFFF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      fill: { fgColor: { rgb: 'FF0F172A' } },
+    };
+    const metaLabelStyle = {
+      font: { bold: true, color: { rgb: 'FF1F2937' } },
+      alignment: { horizontal: 'left', vertical: 'center' },
+    };
+    const metaValueStyle = {
+      alignment: { horizontal: 'left', vertical: 'center' },
+      font: { color: { rgb: 'FF1F2937' } },
+    };
+    const scopeStyle = {
+      font: { italic: true, color: { rgb: 'FF1F2937' } },
+      alignment: { horizontal: 'left', vertical: 'center' },
+      fill: { fgColor: { rgb: 'FFF8FAFC' } },
+    };
+    const baseDataStyle = {
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: buildBorderStyle(borderColor),
+      font: { color: { rgb: 'FF1F2937' } },
+    };
+    const zebraDataStyle = {
+      fill: { fgColor: { rgb: 'FFF8FAFD' } },
+    };
+    const totalRowStyle = {
+      font: { bold: true, color: { rgb: 'FF1F2937' } },
+      fill: { fgColor: { rgb: 'FFE0E7FF' } },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: buildBorderStyle(borderColor),
+    };
+    const firstColumnStyle = {
+      alignment: { horizontal: 'left', vertical: 'center' },
+    };
+
+    setCellStyle(sheet, 0, 0, titleStyle);
+    setCellStyle(sheet, 1, 0, metaLabelStyle);
+    setCellStyle(sheet, 1, 1, metaValueStyle);
+    setCellStyle(sheet, 2, 0, metaLabelStyle);
+    setCellStyle(sheet, 2, 1, metaValueStyle);
+    setCellStyle(sheet, 3, 0, scopeStyle);
+
+    for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+      setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);
+    }
+
+    for (let rowIndex = dataStartRow; rowIndex < totalRowIndex; rowIndex += 1) {
+      const isZebraRow = (rowIndex - dataStartRow) % 2 === 1;
+      for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+        const styles = [baseDataStyle];
+        if (isZebraRow) {
+          styles.push(zebraDataStyle);
+        }
+        if (colIndex === 0) {
+          styles.push(firstColumnStyle);
+        }
+        setCellStyle(sheet, rowIndex, colIndex, ...styles);
+      }
+    }
+
+    for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+      const styles = [totalRowStyle];
+      if (colIndex === 0) {
+        styles.push(firstColumnStyle);
+      }
+      setCellStyle(sheet, totalRowIndex, colIndex, ...styles);
+    }
+
+    const integerColumns = [1, 2, 5, 6, 7, 8, 9];
+    const percentColumns = [3, 4];
+    for (let rowIndex = dataStartRow; rowIndex <= totalRowIndex; rowIndex += 1) {
+      for (const column of integerColumns) {
+        setNumberFormat(sheet, rowIndex, column, '#,##0');
+      }
+      for (const column of percentColumns) {
+        setNumberFormat(sheet, rowIndex, column, '0.0%');
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Отчёт');
+    const fileName = buildExportFileName(periods);
+    XLSX.writeFile(workbook, fileName);
+  } catch (error) {
+    console.error('Не удалось выгрузить таблицу.', error);
+    showPreviewMessage('Не удалось выгрузить таблицу. Повторите попытку.');
+  }
+}
+
+function buildExportDataRow(row) {
+  return [
+    row.label ?? '',
+    safeNumber(row.totalObjects),
+    safeNumber(row.inspectedObjects),
+    safeNumber(row.inspectedPercent) / 100,
+    safeNumber(row.violationPercent) / 100,
+    safeNumber(row.totalViolations),
+    safeNumber(row.currentViolations),
+    safeNumber(row.previousControl),
+    safeNumber(row.resolved),
+    safeNumber(row.onControl),
+  ];
+}
+
+function safeNumber(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Number(value);
+}
+
+function setCellStyle(sheet, rowIndex, colIndex, ...styles) {
+  const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+  const cell = sheet[address];
+  if (!cell) {
+    return;
+  }
+  cell.s = mergeStyles(cell.s ?? {}, ...styles);
+}
+
+function setNumberFormat(sheet, rowIndex, colIndex, format) {
+  const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+  const cell = sheet[address];
+  if (!cell) {
+    return;
+  }
+  cell.z = format;
+}
+
+function mergeStyles(...styles) {
+  const result = {};
+  for (const style of styles) {
+    if (style) {
+      deepMerge(result, style);
+    }
+  }
+  return result;
+}
+
+function deepMerge(target, source) {
+  for (const [key, value] of Object.entries(source)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (!target[key] || typeof target[key] !== 'object') {
+        target[key] = {};
+      }
+      deepMerge(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+
+function buildBorderStyle(color) {
+  return {
+    top: { style: 'thin', color: { rgb: color } },
+    bottom: { style: 'thin', color: { rgb: color } },
+    left: { style: 'thin', color: { rgb: color } },
+    right: { style: 'thin', color: { rgb: color } },
+  };
+}
+
+function formatPeriodRange(period) {
+  if (!period) {
+    return '';
+  }
+  const start = formatDateDisplay(period.start);
+  const end = formatDateDisplay(period.end);
+  if (!start || !end) {
+    return '';
+  }
+  return `${start} — ${end}`;
+}
+
+function formatDateForFileName(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildExportFileName(periods) {
+  const start = formatDateForFileName(periods.current.start);
+  const end = formatDateForFileName(periods.current.end);
+  const sanitized = `Отчёт ОАТИ ${start}_${end}.xlsx`.replace(/[\\/:*?"<>|]+/g, '_');
+  return sanitized;
 }
