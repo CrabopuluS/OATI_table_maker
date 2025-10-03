@@ -9,33 +9,40 @@
   <script src="app.js" type="module" defer></script>
 </head>
 <body>
+  <!-- Шапка приложения: приветственный блок с кратким описанием. -->
   <header class="app-header">
     <h1>Конструктор отчетных таблиц ОАТИ</h1>
     <p>Загрузите исходные файлы с нарушениями и перечнем объектов, настройте параметры и получите интерактивный отчет.</p>
   </header>
 
   <main class="app-main">
+    <!-- Блок загрузки исходных таблиц. -->
     <section class="card">
       <h2>1. Загрузка исходных данных</h2>
       <div class="file-input-group">
+        <!-- Здесь загружаем таблицу с нарушениями. -->
         <label for="violations-file" class="file-label">Таблица по нарушениям (Excel)</label>
         <input type="file" id="violations-file" accept=".xlsx,.xls" />
       </div>
       <div class="file-input-group">
+        <!-- А этот инпут для перечня объектов контроля. -->
         <label for="objects-file" class="file-label">Таблица по объектам (Excel)</label>
         <input type="file" id="objects-file" accept=".xlsx,.xls" />
       </div>
       <p class="hint">Файлы обрабатываются только в браузере, без отправки на сервер.</p>
     </section>
 
+    <!-- Настройка сопоставления колонок для двух таблиц. -->
     <section class="card" id="mapping-section" hidden>
       <h2>2. Настройка соответствия столбцов</h2>
       <div class="mapping-grid">
         <div>
+          <!-- Сопоставление для таблицы нарушений. -->
           <h3>Таблица нарушений</h3>
           <div id="violations-mapping" class="mapping-list"></div>
         </div>
         <div>
+          <!-- Сопоставление для перечня объектов. -->
           <h3>Перечень объектов</h3>
           <div id="objects-mapping" class="mapping-list"></div>
         </div>
@@ -43,10 +50,12 @@
       <p class="hint">Проверьте, что для каждого требуемого поля выбран корректный столбец. Значения подставляются автоматически, но их можно изменить.</p>
     </section>
 
+    <!-- Фильтры по периодам и типам объектов. -->
     <section class="card" id="controls-section" hidden>
       <h2>3. Параметры отчета</h2>
       <div class="controls-grid">
         <fieldset>
+          <!-- Выбор дат для отчётного периода. -->
           <legend>Отчетный период</legend>
           <label>
             Начало периода
@@ -58,6 +67,7 @@
           </label>
         </fieldset>
         <fieldset>
+          <!-- Вторая пара select'ов отвечает за предыдущий период. -->
           <legend>Предыдущий период</legend>
           <label>
             Начало периода
@@ -69,6 +79,7 @@
           </label>
         </fieldset>
         <fieldset>
+          <!-- Радиокнопки переключают режим фильтрации по типам объектов. -->
           <legend>Типы объектов контроля</legend>
           <label class="inline-option">
             <input type="radio" name="type-mode" value="all" checked />
@@ -85,11 +96,14 @@
       <p class="hint">При выборе пользовательских типов можно отметить не более трех значений.</p>
     </section>
 
+    <!-- Предпросмотр и управление выгрузкой отчёта. -->
     <section class="card" id="preview-section" hidden>
       <div class="preview-header">
         <h2>4. Предпросмотр отчётной таблицы</h2>
         <div class="preview-actions">
+          <!-- Кнопка пересчёта вызывает пересборку отчёта без повторной загрузки файлов. -->
           <button id="refresh-report" type="button">Пересчитать</button>
+          <!-- Выгрузка в Excel становится активной только после успешного пересчёта. -->
           <button id="download-report" type="button" disabled>Выгрузить в Excel</button>
         </div>
       </div>
@@ -100,6 +114,7 @@
     </section>
   </main>
 
+  <!-- Подвал со служебной подписью. -->
   <footer class="app-footer">
     <p>Формирование отчетов согласно правилам из предоставленных файлов. Все вычисления выполняются локально.</p>
   </footer>
