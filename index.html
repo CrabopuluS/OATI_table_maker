@@ -88,7 +88,10 @@
     <section class="card" id="preview-section" hidden>
       <div class="preview-header">
         <h2>4. Предпросмотр отчётной таблицы</h2>
-        <button id="refresh-report" type="button">Пересчитать</button>
+        <div class="preview-actions">
+          <button id="refresh-report" type="button">Пересчитать</button>
+          <button id="download-report" type="button" disabled>Выгрузить в Excel</button>
+        </div>
       </div>
       <p id="preview-message" class="hint"></p>
       <div class="table-wrapper">
