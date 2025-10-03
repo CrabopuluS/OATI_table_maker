@@ -615,8 +615,9 @@ function buildReport(periods) {
     const normalizedKey = normalizeDistrictKey(label);
     const key = normalizedKey || DISTRICT_FALLBACK_KEY;
     const displayLabel = districtLookup.get(key) ?? (normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа');
-    if (!districtData.has(key)) {
-      districtData.set(key, {
+    const aggregatedKey = normalizeKey(displayLabel) || DISTRICT_FALLBACK_KEY;
+    if (!districtData.has(aggregatedKey)) {
+      districtData.set(aggregatedKey, {
         label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
@@ -626,8 +627,13 @@ function buildReport(periods) {
         resolvedIds: new Set(),
         controlIds: new Set(),
       });
+    } else {
+      const entry = districtData.get(aggregatedKey);
+      if (entry && shouldReplaceDistrictLabel(entry.label, displayLabel)) {
+        entry.label = displayLabel;
+      }
     }
-    return districtData.get(key);
+    return districtData.get(aggregatedKey);
   };
 
   for (const record of state.objects) {
