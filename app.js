@@ -143,35 +143,24 @@ async function readExcelFile(file, headerKeywords) {
   if (!sheet || !sheet['!ref']) {
     throw new Error('Лист Excel не содержит данных.');
   }
-  const headerInfo = findHeaderRow(sheet, headerKeywords);
-  const records = extractRecords(sheet, headerInfo.rowIndex, headerInfo.headers);
-  return { records, headers: headerInfo.headers };
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const headerRowIndex = range.s.r + 2;
+  if (headerRowIndex > range.e.r) {
+    throw new Error('Не удалось определить строку заголовков.');
+  }
+  const headers = extractHeaderRow(sheet, headerRowIndex, range);
+  const records = extractRecords(sheet, headerRowIndex, headers);
+  return { records, headers };
 }
 
-function findHeaderRow(sheet, headerKeywords) {
-  const range = XLSX.utils.decode_range(sheet['!ref']);
-  const normalizedKeywords = headerKeywords.map((keyword) => keyword.trim().toLowerCase());
-  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
-    const rowValues = [];
-    for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
-      const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-      const cell = sheet[address];
-      rowValues.push(typeof cell?.v === 'string' ? cell.v.trim() : cell?.v);
-    }
-    const normalizedRow = rowValues.map((value) => normalizeText(value));
-    const hasAllKeywords = normalizedKeywords.every((keyword) => normalizedRow.some((cellValue) => cellValue.includes(keyword)));
-    if (hasAllKeywords) {
-      const headers = rowValues.map((value) => (typeof value === 'string' ? value.trim() : value ?? ''));
-      return { rowIndex, headers };
-    }
-  }
-  const defaultHeaders = [];
+function extractHeaderRow(sheet, rowIndex, range) {
+  const headers = [];
   for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
-    const address = XLSX.utils.encode_cell({ r: range.s.r, c: colIndex });
+    const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
     const cell = sheet[address];
-    defaultHeaders.push(typeof cell?.v === 'string' ? cell.v.trim() : cell?.v ?? `Колонка ${colIndex + 1}`);
+    headers.push(typeof cell?.v === 'string' ? cell.v.trim() : cell?.v ?? `Колонка ${colIndex + 1}`);
   }
-  return { rowIndex: range.s.r, headers: defaultHeaders };
+  return headers;
 }
 
 function extractRecords(sheet, headerRowIndex, headers) {
