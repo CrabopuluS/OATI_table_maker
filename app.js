@@ -11,7 +11,7 @@ const violationFieldDefinitions = [
 ];
 
 const objectFieldDefinitions = [
-  { key: 'objectType', label: 'Тип объекта', candidates: ['тип объекта', 'тип объекта контроля'] },
+  { key: 'objectType', label: 'Вид объекта', candidates: ['вид объекта', 'тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
 ];
@@ -298,18 +298,9 @@ function updateAvailableFilters() {
     renderDateSelect(elements.previousStart, state.availableDates, 0);
     renderDateSelect(elements.previousEnd, state.availableDates, previousEndIndex);
   }
-  const violationTypeColumn = state.violationMapping.objectType;
   const objectTypeColumn = state.objectMapping.objectType;
-  const violationTypes = collectUniqueValues(state.violations, violationTypeColumn);
-  const objectTypes = collectUniqueValues(state.objects, objectTypeColumn);
-  const mergedTypes = new Map();
-  for (const type of [...violationTypes, ...objectTypes]) {
-    const key = normalizeKey(type);
-    if (key && !mergedTypes.has(key)) {
-      mergedTypes.set(key, type);
-    }
-  }
-  state.availableTypes = Array.from(mergedTypes.values()).sort((a, b) => a.localeCompare(b, 'ru'));
+  const objectTypes = collectUniqueValues(state.objects, objectTypeColumn).sort((a, b) => a.localeCompare(b, 'ru'));
+  state.availableTypes = objectTypes;
   state.customTypes = state.customTypes.filter((value) => state.availableTypes.includes(value));
   renderTypeOptions();
 }
