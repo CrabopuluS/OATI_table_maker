@@ -1,3 +1,4 @@
+/* Общие переменные темы и базовые настройки шрифта. */
 :root {
   color-scheme: light dark;
   --bg-color: #f5f7fb;
@@ -11,12 +12,14 @@
   font-family: 'Segoe UI', Tahoma, sans-serif;
 }
 
+/* Базовые настройки фона и цвета текста. */
 body {
   margin: 0;
   background: var(--bg-color);
   color: var(--text-color);
 }
 
+/* Шапка и подвал оформлены в едином стиле. */
 .app-header,
 .app-footer {
   background: #101828;
@@ -30,6 +33,7 @@ body {
   font-size: 2rem;
 }
 
+/* Основная колонка с карточками. */
 .app-main {
   display: flex;
   flex-direction: column;
@@ -39,6 +43,7 @@ body {
   margin: 0 auto;
 }
 
+/* Карточки с легкой тенью и скруглением. */
 .card {
   background: var(--card-bg);
   border-radius: 16px;
@@ -53,6 +58,7 @@ body {
   font-size: 1.4rem;
 }
 
+/* Группа элементов для загрузки файлов. */
 .file-input-group {
   display: flex;
   flex-direction: column;
@@ -76,6 +82,7 @@ input[type="file"] {
   margin-top: 0.5rem;
 }
 
+/* Две колонки для сопоставления столбцов. */
 .mapping-grid {
   display: grid;
   gap: 1.5rem;
@@ -104,12 +111,14 @@ input[type="file"] {
   border: 1px solid var(--border-color);
 }
 
+/* Адаптивная сетка для фильтров. */
 .controls-grid {
   display: grid;
   gap: 1.5rem;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+/* Общий вид fieldset: скругления и вертикальное расположение. */
 fieldset {
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -143,6 +152,7 @@ select {
   font-weight: 500;
 }
 
+/* Сетка с чекбоксами типов объектов. */
 .type-options {
   display: grid;
   gap: 0.4rem;
@@ -156,6 +166,7 @@ select {
   font-weight: 500;
 }
 
+/* Шапка блока предпросмотра с действиями. */
 .preview-header {
   display: flex;
   align-items: center;
@@ -163,6 +174,7 @@ select {
   gap: 1rem;
 }
 
+/* Базовый стиль кнопок действий. */
 #refresh-report,
 #download-report {
   background: var(--accent-color);
@@ -183,6 +195,7 @@ select {
   background: var(--accent-hover);
 }
 
+/* Отступы между кнопками предпросмотра. */
 .preview-actions {
   display: flex;
   gap: 0.75rem;
@@ -202,22 +215,26 @@ select {
   background: #94a3b8;
 }
 
+/* Контейнер для горизонтального скролла таблицы. */
 .table-wrapper {
   overflow-x: auto;
   margin-top: 1rem;
 }
 
+/* Сама таблица — фиксируем ширину и схлопываем границы. */
 table {
   border-collapse: collapse;
   width: 100%;
   min-width: 920px;
 }
 
+/* Заголовок таблицы с заливкой. */
 thead th {
   background: #f0f4ff;
   font-weight: 700;
 }
 
+/* Общие отступы и границы для ячеек. */
 td,
 th {
   border: 1px solid var(--border-color);
@@ -225,15 +242,18 @@ th {
   text-align: center;
 }
 
+/* Лёгкая зебра для читаемости строк. */
 tbody tr:nth-child(even) {
   background: #f8fafd;
 }
 
+/* Итоговая строка с выделением. */
 tfoot td {
   font-weight: 700;
   background: #eef2ff;
 }
 
+/* Простая адаптация под узкие экраны. */
 @media (max-width: 720px) {
   .app-header h1 {
     font-size: 1.6rem;
