@@ -1,6 +1,22 @@
 const CONTROL_STATUSES = ['на устранении', 'на контроле инспектора оати'];
 const RESOLVED_STATUS = 'снят с контроля';
 
+const MOSCOW_DISTRICT_ABBREVIATIONS = Object.freeze({
+  'центральный административный округ': 'ЦАО',
+  'северный административный округ': 'САО',
+  'северо-восточный административный округ': 'СВАО',
+  'восточный административный округ': 'ВАО',
+  'юго-восточный административный округ': 'ЮВАО',
+  'южный административный округ': 'ЮАО',
+  'юго-западный административный округ': 'ЮЗАО',
+  'западный административный округ': 'ЗАО',
+  'северо-западный административный округ': 'СЗАО',
+  'зеленоградский административный округ': 'ЗелАО',
+  'новомосковский административный округ': 'НАО',
+  'троицкий административный округ': 'ТАО',
+  'троицкий и новомосковский административный округ': 'ТиНАО',
+});
+
 const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
   { key: 'status', label: 'Статус нарушения', candidates: ['статус нарушения', 'статус'] },
@@ -493,16 +509,44 @@ function getSelectedPeriods() {
   };
 }
 
+function getDistrictDisplayLabel(label) {
+  if (!label) {
+    return 'Без округа';
+  }
+  const normalized = normalizeDistrictKey(label);
+  if (!normalized || normalized === 'без округа') {
+    return 'Без округа';
+  }
+  const abbreviation = MOSCOW_DISTRICT_ABBREVIATIONS[normalized];
+  if (abbreviation) {
+    return abbreviation;
+  }
+  const trimmed = label.trim();
+  // Пример: getDistrictDisplayLabel('Центральный административный округ') вернёт 'ЦАО'.
+  return trimmed || 'Без округа';
+}
+
+function normalizeDistrictKey(value) {
+  const normalized = normalizeKey(value);
+  if (!normalized) {
+    return '';
+  }
+  const withoutParentheses = normalized.replace(/\s*\(.*?\)\s*/g, ' ');
+  const withoutCityMention = withoutParentheses.replace(/\s+г\.?\s*москв[аеы]?$/u, '');
+  return withoutCityMention.replace(/\s+/g, ' ').trim();
+}
+
 function buildReport(periods) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
   const typePredicate = createTypePredicate();
   const districtData = new Map();
   const ensureEntry = (label) => {
-    const key = normalizeKey(label) || 'без округа';
+    const displayLabel = getDistrictDisplayLabel(label);
+    const key = normalizeKey(displayLabel) || 'без округа';
     if (!districtData.has(key)) {
       districtData.set(key, {
-        label: label || 'Без округа',
+        label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
         objectsWithViolations: new Set(),
@@ -523,7 +567,7 @@ function buildReport(periods) {
     if (!typeValue && state.typeMode === 'custom') {
       continue;
     }
-    const districtLabel = getValueAsString(record[objectMapping.district]) || 'Без округа';
+    const districtLabel = getValueAsString(record[objectMapping.district]);
     const objectName = getValueAsString(record[objectMapping.objectName]);
     if (!objectName) {
       continue;
@@ -540,7 +584,7 @@ function buildReport(periods) {
     if (!typeValue && state.typeMode === 'custom') {
       continue;
     }
-    const districtLabel = getValueAsString(record[violationMapping.district]) || 'Без округа';
+    const districtLabel = getValueAsString(record[violationMapping.district]);
     const objectName = getValueAsString(record[violationMapping.objectName]);
     const violationId = getValueAsString(record[violationMapping.id]);
     const status = getValueAsString(record[violationMapping.status]);
