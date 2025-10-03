@@ -1,0 +1,220 @@
+:root {
+  color-scheme: light dark;
+  --bg-color: #f5f7fb;
+  --card-bg: #ffffff;
+  --border-color: #dce1eb;
+  --text-color: #1c2534;
+  --accent-color: #0066ff;
+  --accent-hover: #0050cc;
+  --muted-color: #6b7688;
+  --shadow-color: rgba(16, 24, 40, 0.08);
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+.app-header,
+.app-footer {
+  background: #101828;
+  color: #f9fafb;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 18px 40px -24px var(--shadow-color);
+  border: 1px solid var(--border-color);
+}
+
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+}
+
+.file-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.file-label {
+  font-weight: 600;
+}
+
+input[type="file"] {
+  padding: 0.4rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.hint {
+  color: var(--muted-color);
+  margin-top: 0.5rem;
+}
+
+.mapping-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mapping-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mapping-item label {
+  font-weight: 600;
+}
+
+.mapping-item select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.controls-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+fieldset {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+legend {
+  font-weight: 700;
+  padding: 0 0.5rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.inline-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.type-options {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.type-options label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+#refresh-report {
+  background: var(--accent-color);
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1.4rem;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#refresh-report:hover {
+  background: var(--accent-hover);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 920px;
+}
+
+thead th {
+  background: #f0f4ff;
+  font-weight: 700;
+}
+
+td,
+th {
+  border: 1px solid var(--border-color);
+  padding: 0.6rem 0.75rem;
+  text-align: center;
+}
+
+tbody tr:nth-child(even) {
+  background: #f8fafd;
+}
+
+tfoot td {
+  font-weight: 700;
+  background: #eef2ff;
+}
+
+@media (max-width: 720px) {
+  .app-header h1 {
+    font-size: 1.6rem;
+  }
+
+  table {
+    min-width: 800px;
+  }
+}
