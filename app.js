@@ -144,13 +144,62 @@ async function readExcelFile(file, headerKeywords) {
     throw new Error('Лист Excel не содержит данных.');
   }
   const range = XLSX.utils.decode_range(sheet['!ref']);
-  const headerRowIndex = range.s.r + 2;
-  if (headerRowIndex > range.e.r) {
+  const headerRowIndex = detectHeaderRowIndex(sheet, range, headerKeywords);
+  if (headerRowIndex === null) {
     throw new Error('Не удалось определить строку заголовков.');
   }
   const headers = extractHeaderRow(sheet, headerRowIndex, range);
   const records = extractRecords(sheet, headerRowIndex, headers);
   return { records, headers };
+}
+
+function detectHeaderRowIndex(sheet, range, headerKeywords) {
+  const normalizedKeywords = headerKeywords.map((item) => normalizeHeaderValue(item));
+  let bestRowIndex = null;
+  let bestScore = -Infinity;
+  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+    let matchCount = 0;
+    let textCount = 0;
+    let valueCount = 0;
+    for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+      const cell = sheet[address];
+      if (!cell) {
+        continue;
+      }
+      const normalized = normalizeHeaderValue(typeof cell.v === 'string' ? cell.v : cell.w ?? cell.v);
+      if (!normalized) {
+        continue;
+      }
+      valueCount += 1;
+      if (!Number.isNaN(Number(normalized))) {
+        continue;
+      }
+      textCount += 1;
+      if (normalizedKeywords.includes(normalized)) {
+        matchCount += 1;
+      }
+    }
+    if (!valueCount) {
+      continue;
+    }
+    const score = matchCount * 10 + textCount;
+    if (score > bestScore) {
+      bestScore = score;
+      bestRowIndex = rowIndex;
+    }
+  }
+  return bestRowIndex;
+}
+
+function normalizeHeaderValue(value) {
+  if (typeof value === 'string') {
+    return value.replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value).trim().toLowerCase();
 }
 
 function extractHeaderRow(sheet, rowIndex, range) {
