@@ -38,6 +38,7 @@ const violationFieldDefinitions = [
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'inspectionDate', label: 'Дата обследования', candidates: ['дата обследования', 'дата осмотра', 'дата контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
+  { key: 'dataSource', label: 'Источник данных', candidates: ['источник данных'], optional: true },
 ];
 
 // Аналогичный список для справочника объектов.
@@ -64,6 +65,7 @@ const state = {
   availableDates: [],
   lastReport: null,
   lastPeriods: null,
+  dataSourceOption: 'all',
 };
 
 // Чтобы лишний раз не перерисовывать таблицу при серии событий, ввёл очередь на requestAnimationFrame.
@@ -87,6 +89,8 @@ const elements = {
   typeMessage: document.getElementById('type-message'),
   violationOptions: document.getElementById('violation-options'),
   violationMessage: document.getElementById('violation-message'),
+  dataSourceSelect: document.getElementById('data-source-filter'),
+  dataSourceMessage: document.getElementById('data-source-message'),
   previewMessage: document.getElementById('preview-message'),
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
@@ -131,6 +135,17 @@ if (elements.downloadButton) {
     if (state.lastReport && state.lastPeriods) {
       exportReportToExcel(state.lastReport, state.lastPeriods);
     }
+  });
+}
+
+if (elements.dataSourceSelect) {
+  elements.dataSourceSelect.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    state.dataSourceOption = target.value;
+    schedulePreviewUpdate();
   });
 }
 
@@ -399,6 +414,13 @@ function renderMappingList(container, columns, definitions, mapping, onChange) {
     label.textContent = definition.label;
 
     const select = document.createElement('select');
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = '— Не выбрано —';
+    if (!mapping[definition.key]) {
+      placeholderOption.selected = true;
+    }
+    select.append(placeholderOption);
     for (const column of columns) {
       const option = document.createElement('option');
       option.value = column ?? '';
@@ -465,6 +487,7 @@ function updateAvailableFilters() {
     state.customViolations = [];
   }
   renderViolationOptions();
+  updateDataSourceControl();
 }
 
 function updateDateSelect(select, dates, defaultIndex) {
@@ -548,6 +571,58 @@ function handleTypeSelection(checkbox) {
   }
   elements.typeMessage.textContent = '';
   schedulePreviewUpdate();
+}
+
+function updateDataSourceControl() {
+  if (!elements.dataSourceSelect || !elements.dataSourceMessage) {
+    return;
+  }
+  const previousOption = state.dataSourceOption;
+  const column = state.violationMapping.dataSource;
+  if (!column) {
+    state.dataSourceOption = 'all';
+    elements.dataSourceSelect.value = 'all';
+    elements.dataSourceSelect.disabled = true;
+    elements.dataSourceMessage.textContent = 'Сопоставьте колонку «Источник данных», чтобы выбрать источник отчёта.';
+    if (previousOption !== state.dataSourceOption) {
+      schedulePreviewUpdate();
+    }
+    return;
+  }
+  elements.dataSourceSelect.disabled = false;
+  elements.dataSourceSelect.value = state.dataSourceOption;
+  const summary = summarizeDataSourceCategories(column);
+  if (summary.unknown) {
+    elements.dataSourceMessage.textContent = 'Неизвестные значения источника учитываются только при выборе «ОАТИ и ЦАФАП».';
+  } else if (!summary.oati && !summary.cafap && !summary.both) {
+    elements.dataSourceMessage.textContent = 'В выбранной колонке отсутствуют значения источника данных.';
+  } else {
+    elements.dataSourceMessage.textContent = '';
+  }
+}
+
+function summarizeDataSourceCategories(column) {
+  const summary = { oati: false, cafap: false, both: false, unknown: false };
+  for (const record of state.violations) {
+    const rawValue = record[column];
+    const category = categorizeDataSource(rawValue);
+    if (!category) {
+      if (getValueAsString(rawValue)) {
+        summary.unknown = true;
+      }
+      continue;
+    }
+    if (category === 'oati') {
+      summary.oati = true;
+    } else if (category === 'cafap') {
+      summary.cafap = true;
+    } else if (category === 'both') {
+      summary.both = true;
+    } else {
+      summary.unknown = true;
+    }
+  }
+  return summary;
 }
 
 function renderViolationOptions() {
@@ -705,7 +780,7 @@ function runPreviewUpdate() {
 
 // Проверяю, что пользователь проставил все необходимые соответствия.
 function isMappingComplete(mapping, definitions) {
-  return definitions.every((definition) => Boolean(mapping[definition.key]));
+  return definitions.every((definition) => definition.optional || Boolean(mapping[definition.key]));
 }
 
 // Собираю выбранные диапазоны дат и параллельно валидирую ввод.
@@ -838,6 +913,7 @@ function buildReport(periods) {
   const objectMapping = state.objectMapping;
   const typePredicate = createTypePredicate();
   const violationPredicate = createViolationPredicate();
+  const dataSourcePredicate = createDataSourcePredicate();
   // Здесь буду копить агрегированные данные по округам.
   const districtData = new Map();
   const districtLookup = buildDistrictLookup(
@@ -877,6 +953,9 @@ function buildReport(periods) {
     const violationObjectNameColumn = violationMapping.objectName;
     if (violationNameColumn && violationObjectNameColumn) {
       for (const record of state.violations) {
+        if (!dataSourcePredicate(record)) {
+          continue;
+        }
         const violationName = getValueAsString(record[violationNameColumn]);
         if (!violationName || !violationPredicate(violationName)) {
           continue;
@@ -918,6 +997,9 @@ function buildReport(periods) {
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
   for (const record of state.violations) {
+    if (!dataSourcePredicate(record)) {
+      continue;
+    }
     const typeValue = getValueAsString(record[violationMapping.objectType]);
     if (typeValue && !typePredicate(typeValue)) {
       continue;
@@ -1157,6 +1239,30 @@ function createViolationPredicate() {
   return (value) => allowed.has(normalizeKey(value));
 }
 
+function createDataSourcePredicate() {
+  const column = state.violationMapping.dataSource;
+  if (!column) {
+    return () => true;
+  }
+  const mode = state.dataSourceOption;
+  if (mode === 'all') {
+    return () => true;
+  }
+  return (record) => {
+    const category = categorizeDataSource(record[column]);
+    if (!category) {
+      return false;
+    }
+    if (mode === 'oati') {
+      return category === 'oati';
+    }
+    if (mode === 'cafap') {
+      return category === 'cafap';
+    }
+    return true;
+  };
+}
+
 // Универсальный способ привести строку к нижнему регистру и убрать лишние пробелы.
 function normalizeKey(value) {
   if (value === null || value === undefined) {
@@ -1182,6 +1288,26 @@ function getValueAsString(value) {
     return formatDateDisplay(value);
   }
   return value.toString().trim();
+}
+
+function categorizeDataSource(value) {
+  const text = getValueAsString(value);
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    return '';
+  }
+  const hasOati = normalized.includes('оати');
+  const hasCafap = normalized.includes('цафап');
+  if (hasOati && hasCafap) {
+    return 'both';
+  }
+  if (hasOati) {
+    return 'oati';
+  }
+  if (hasCafap) {
+    return 'cafap';
+  }
+  return '';
 }
 
 // Выдираю уникальные даты из нужной колонки и сортирую их.
@@ -1324,6 +1450,7 @@ function exportReportToExcel(report, periods) {
     const violationDescription = state.violationMode === 'custom' && state.customViolations.length
       ? `Выбранные нарушения: ${state.customViolations.join(', ')}`
       : 'Все наименования нарушений';
+    const dataSourceDescription = describeSelectedDataSource();
 
     // Шапка будущего листа: заголовок, описания периодов и выбранных типов.
     aoa.push([title]);
@@ -1331,6 +1458,7 @@ function exportReportToExcel(report, periods) {
     aoa.push(['Предыдущий период', formatPeriodRange(periods.previous)]);
     aoa.push([typeDescription]);
     aoa.push([violationDescription]);
+    aoa.push([dataSourceDescription]);
     aoa.push([]);
 
     const headerRowIndex = aoa.length;
@@ -1507,6 +1635,17 @@ function mergeStyles(...styles) {
     }
   }
   return result;
+}
+
+function describeSelectedDataSource() {
+  switch (state.dataSourceOption) {
+    case 'oati':
+      return 'Источник данных: ОАТИ';
+    case 'cafap':
+      return 'Источник данных: ЦАФАП';
+    default:
+      return 'Источник данных: ОАТИ и ЦАФАП';
+  }
 }
 
 // Рекурсивное слияние объектов — минимальная реализация без внешних зависимостей.
