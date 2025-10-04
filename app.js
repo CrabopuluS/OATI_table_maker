@@ -103,7 +103,93 @@ const elements = {
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
   downloadButton: document.getElementById('download-report'),
+  themeToggle: document.getElementById('theme-toggle'),
+  themeToggleLabel: document.getElementById('theme-toggle-text'),
 };
+
+const THEME_STORAGE_KEY = 'oati-theme-preference';
+const themeMediaQuery = typeof window !== 'undefined' && window.matchMedia
+  ? window.matchMedia('(prefers-color-scheme: dark)')
+  : null;
+
+initTheme();
+
+function readStoredTheme() {
+  try {
+    const storedValue = localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedValue === 'light' || storedValue === 'dark') {
+      return storedValue;
+    }
+  } catch (error) {
+    console.warn('Не удалось получить сохраненную тему интерфейса:', error);
+  }
+  return null;
+}
+
+function persistTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (error) {
+    console.warn('Не удалось сохранить выбранную тему интерфейса:', error);
+  }
+}
+
+function resolveInitialTheme() {
+  const stored = readStoredTheme();
+  if (stored) {
+    return stored;
+  }
+  if (themeMediaQuery?.matches) {
+    return 'dark';
+  }
+  return 'light';
+}
+
+function applyTheme(theme, { persist = false } = {}) {
+  const normalized = theme === 'dark' ? 'dark' : 'light';
+  document.body.classList.toggle('theme-dark', normalized === 'dark');
+  document.body.classList.toggle('theme-light', normalized === 'light');
+  document.body.dataset.theme = normalized;
+
+  if (elements.themeToggle) {
+    elements.themeToggle.setAttribute('aria-pressed', normalized === 'dark' ? 'true' : 'false');
+  }
+
+  if (elements.themeToggleLabel) {
+    elements.themeToggleLabel.textContent = normalized === 'dark' ? 'Светлый режим' : 'Темный режим';
+  }
+
+  if (persist) {
+    persistTheme(normalized);
+  }
+}
+
+function initTheme() {
+  const initialTheme = resolveInitialTheme();
+  applyTheme(initialTheme);
+
+  if (elements.themeToggle) {
+    elements.themeToggle.addEventListener('click', () => {
+      const nextTheme = document.body.classList.contains('theme-dark') ? 'light' : 'dark';
+      applyTheme(nextTheme, { persist: true });
+    });
+  }
+
+  if (themeMediaQuery) {
+    const handleMediaChange = (event) => {
+      if (readStoredTheme()) {
+        return;
+      }
+      applyTheme(event.matches ? 'dark' : 'light');
+    };
+
+    if (typeof themeMediaQuery.addEventListener === 'function') {
+      themeMediaQuery.addEventListener('change', handleMediaChange);
+    } else if (typeof themeMediaQuery.addListener === 'function') {
+      themeMediaQuery.addListener(handleMediaChange);
+    }
+  }
+}
 
 // Форматер чисел, чтобы везде были привычные для отчётов пробелы.
 const numberFormatter = new Intl.NumberFormat('ru-RU');
