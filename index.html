@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Конструктор отчетных таблиц ОАТИ</title>
+  <link rel="icon" type="image/svg+xml" href="дизайн/ЛОГО.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -37,12 +38,24 @@
       <div class="file-input-group">
         <!-- Здесь загружаем таблицу с нарушениями. -->
         <label for="violations-file" class="file-label">Таблица по нарушениям (Excel)</label>
-        <input type="file" id="violations-file" accept=".xlsx,.xls" />
+        <div class="file-input-control">
+          <input type="file" id="violations-file" accept=".xlsx,.xls" />
+          <div class="file-loader" id="violations-loader" role="status" aria-live="polite" hidden>
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="file-loader__text">Обработка…</span>
+          </div>
+        </div>
       </div>
       <div class="file-input-group">
         <!-- А этот инпут для перечня объектов контроля. -->
         <label for="objects-file" class="file-label">Таблица по объектам (Excel)</label>
-        <input type="file" id="objects-file" accept=".xlsx,.xls" />
+        <div class="file-input-control">
+          <input type="file" id="objects-file" accept=".xlsx,.xls" />
+          <div class="file-loader" id="objects-loader" role="status" aria-live="polite" hidden>
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="file-loader__text">Обработка…</span>
+          </div>
+        </div>
       </div>
       <p class="hint">Файлы обрабатываются только в браузере, без отправки на сервер.</p>
     </section>

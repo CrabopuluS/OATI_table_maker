@@ -81,6 +81,8 @@ const elements = {
   objectsMapping: document.getElementById('objects-mapping'),
   controlsSection: document.getElementById('controls-section'),
   previewSection: document.getElementById('preview-section'),
+  violationsLoader: document.getElementById('violations-loader'),
+  objectsLoader: document.getElementById('objects-loader'),
   currentStart: document.getElementById('current-start'),
   currentEnd: document.getElementById('current-end'),
   previousStart: document.getElementById('previous-start'),
@@ -108,7 +110,12 @@ if (elements.violationsInput) {
     if (!file) {
       return;
     }
-    await loadDataset('violations', file);
+    setLoadingIndicator('violations', true, file.name);
+    try {
+      await loadDataset('violations', file);
+    } finally {
+      setLoadingIndicator('violations', false);
+    }
   });
 }
 
@@ -119,7 +126,12 @@ if (elements.objectsInput) {
     if (!file) {
       return;
     }
-    await loadDataset('objects', file);
+    setLoadingIndicator('objects', true, file.name);
+    try {
+      await loadDataset('objects', file);
+    } finally {
+      setLoadingIndicator('objects', false);
+    }
   });
 }
 
@@ -226,6 +238,26 @@ async function loadDataset(kind, file) {
   } catch (error) {
     console.error(error);
     showPreviewMessage(error instanceof Error ? error.message : 'Не удалось обработать файл.');
+  }
+}
+
+function setLoadingIndicator(kind, isLoading, fileName) {
+  const loaderMap = {
+    violations: elements.violationsLoader,
+    objects: elements.objectsLoader,
+  };
+  const loader = loaderMap[kind];
+  if (!loader) {
+    return;
+  }
+  if (isLoading) {
+    const textNode = loader.querySelector('.file-loader__text');
+    if (textNode) {
+      textNode.textContent = fileName ? `Обрабатываем «${fileName}»` : 'Обрабатываем файл';
+    }
+    loader.hidden = false;
+  } else {
+    loader.hidden = true;
   }
 }
 
