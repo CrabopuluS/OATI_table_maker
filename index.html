@@ -69,55 +69,79 @@
     <section class="card" id="controls-section" hidden>
       <h2>3. Параметры отчета</h2>
       <div class="controls-grid">
-        <fieldset>
+        <fieldset class="period-card period-card--current">
           <!-- Выбор дат для отчётного периода. -->
           <legend>Отчетный период</legend>
-          <label>
-            Начало периода
-            <select id="current-start"></select>
-          </label>
-          <label>
-            Конец периода
-            <select id="current-end"></select>
-          </label>
+          <div class="period-card__header">
+            <span class="period-card__badge">Текущий анализ</span>
+            <p class="period-card__description">Сформируйте основу отчета, выбрав фактический диапазон.</p>
+          </div>
+          <div class="period-card__controls">
+            <label class="fancy-select">
+              <span class="fancy-select__label">Начало периода</span>
+              <select id="current-start"></select>
+              <span class="fancy-select__chevron" aria-hidden="true"></span>
+            </label>
+            <label class="fancy-select">
+              <span class="fancy-select__label">Конец периода</span>
+              <select id="current-end"></select>
+              <span class="fancy-select__chevron" aria-hidden="true"></span>
+            </label>
+          </div>
         </fieldset>
-        <fieldset>
+        <fieldset class="period-card period-card--previous">
           <!-- Вторая пара select'ов отвечает за предыдущий период. -->
           <legend>Предыдущий период</legend>
-          <label>
-            Начало периода
-            <select id="previous-start"></select>
-          </label>
-          <label>
-            Конец периода
-            <select id="previous-end"></select>
-          </label>
+          <div class="period-card__header">
+            <span class="period-card__badge">Сравнительный фон</span>
+            <p class="period-card__description">Подберите интервал для сопоставления динамики.</p>
+          </div>
+          <div class="period-card__controls">
+            <label class="fancy-select">
+              <span class="fancy-select__label">Начало периода</span>
+              <select id="previous-start"></select>
+              <span class="fancy-select__chevron" aria-hidden="true"></span>
+            </label>
+            <label class="fancy-select">
+              <span class="fancy-select__label">Конец периода</span>
+              <select id="previous-end"></select>
+              <span class="fancy-select__chevron" aria-hidden="true"></span>
+            </label>
+          </div>
         </fieldset>
-        <fieldset>
+        <fieldset class="choice-card">
           <!-- Радиокнопки переключают режим фильтрации по типам объектов. -->
           <legend>Типы объектов контроля</legend>
-          <label class="inline-option">
-            <input type="radio" name="type-mode" value="all" checked />
-            Все типы объектов
-          </label>
-          <label class="inline-option">
-            <input type="radio" name="type-mode" value="custom" />
-            Выбрать до трех типов
-          </label>
-          <div id="type-options" class="type-options" aria-live="polite"></div>
+          <div class="choice-card__modes">
+            <label class="inline-option">
+              <input type="radio" name="type-mode" value="all" checked />
+              <span class="inline-option__decor" aria-hidden="true"></span>
+              <span class="inline-option__text">Все типы объектов</span>
+            </label>
+            <label class="inline-option">
+              <input type="radio" name="type-mode" value="custom" />
+              <span class="inline-option__decor" aria-hidden="true"></span>
+              <span class="inline-option__text">Выбрать до трех типов</span>
+            </label>
+          </div>
+          <div id="type-options" class="multi-select-root" aria-live="polite"></div>
           <p id="type-message" class="hint" role="status" aria-live="polite"></p>
         </fieldset>
-        <fieldset>
+        <fieldset class="choice-card">
           <legend>Наименования нарушений</legend>
-          <label class="inline-option">
-            <input type="radio" name="violation-mode" value="all" checked />
-            Все наименования
-          </label>
-          <label class="inline-option">
-            <input type="radio" name="violation-mode" value="custom" />
-            Выбрать до пяти наименований
-          </label>
-          <div id="violation-options" class="violation-options" aria-live="polite"></div>
+          <div class="choice-card__modes">
+            <label class="inline-option">
+              <input type="radio" name="violation-mode" value="all" checked />
+              <span class="inline-option__decor" aria-hidden="true"></span>
+              <span class="inline-option__text">Все наименования</span>
+            </label>
+            <label class="inline-option">
+              <input type="radio" name="violation-mode" value="custom" />
+              <span class="inline-option__decor" aria-hidden="true"></span>
+              <span class="inline-option__text">Выбрать до пяти наименований</span>
+            </label>
+          </div>
+          <div id="violation-options" class="multi-select-root" aria-live="polite"></div>
           <p id="violation-message" class="hint" role="status" aria-live="polite"></p>
         </fieldset>
         <fieldset>
