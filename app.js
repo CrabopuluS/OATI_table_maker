@@ -3,6 +3,7 @@
 const CONTROL_STATUSES = ['на устранении', 'на контроле инспектора оати'];
 const CONTROL_STATUS_SET = new Set(CONTROL_STATUSES);
 const RESOLVED_STATUS = 'снят с контроля';
+const INSPECTION_RESULT_VIOLATION = 'нарушение выявлено';
 
 // Список округов и их официальных сокращений держу в одном месте, чтобы дальше не размазывать магические строки.
 const MOSCOW_DISTRICT_ABBREVIATIONS = Object.freeze({
@@ -34,6 +35,11 @@ const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
   { key: 'status', label: 'Статус нарушения', candidates: ['статус нарушения', 'статус'] },
   { key: 'violationName', label: 'Наименование нарушения', candidates: ['наименование нарушения', 'нарушение'] },
+  {
+    key: 'inspectionResult',
+    label: 'Результат обследования',
+    candidates: ['результат обследования', 'результат осмотра', 'результат проверки'],
+  },
   { key: 'objectType', label: 'Тип объекта', candidates: ['тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'inspectionDate', label: 'Дата обследования', candidates: ['дата обследования', 'дата осмотра', 'дата контроля'] },
@@ -1093,7 +1099,7 @@ function buildReport(periods) {
         label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
-        objectsWithViolations: new Set(),
+        objectsWithDetectedViolations: new Set(),
         currentViolationIds: new Set(),
         previousControlIds: new Set(),
         resolvedIds: new Set(),
@@ -1157,6 +1163,8 @@ function buildReport(periods) {
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
+  const inspectionResultColumn = violationMapping.inspectionResult;
+
   for (const record of state.violations) {
     if (!dataSourcePredicate(record)) {
       continue;
@@ -1186,14 +1194,23 @@ function buildReport(periods) {
       continue;
     }
     const entry = ensureEntry(districtLabel);
+    const inspectionResultValue = inspectionResultColumn
+      ? getValueAsString(record[inspectionResultColumn])
+      : '';
+    const normalizedInspectionResult = normalizeText(inspectionResultValue);
+
     if (isWithinPeriod(inspectionDate, periods.current)) {
       if (objectName) {
         entry.inspectedObjects.add(objectName);
       }
+      if (
+        inspectionResultColumn &&
+        objectName &&
+        normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
+      ) {
+        entry.objectsWithDetectedViolations.add(objectName);
+      }
       if (violationId) {
-        if (objectName) {
-          entry.objectsWithViolations.add(objectName);
-        }
         entry.currentViolationIds.add(violationId);
       }
       if (normalizedStatus === RESOLVED_STATUS && violationId) {
@@ -1216,7 +1233,7 @@ function buildReport(periods) {
   const totals = {
     totalObjects: 0,
     inspectedObjects: 0,
-    objectsWithViolations: 0,
+    objectsWithDetectedViolations: 0,
     totalViolations: new Set(),
     currentViolations: new Set(),
     previousControl: new Set(),
@@ -1228,7 +1245,7 @@ function buildReport(periods) {
   for (const entry of sortedEntries) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
-    const objectWithViolationsCount = entry.objectsWithViolations.size;
+    const objectsWithDetectedViolationsCount = entry.objectsWithDetectedViolations.size;
     const currentViolationsCount = entry.currentViolationIds.size;
     const previousControlCount = entry.previousControlIds.size;
     const resolvedCount = entry.resolvedIds.size;
@@ -1241,7 +1258,7 @@ function buildReport(periods) {
       totalObjects: totalObjectsCount,
       inspectedObjects: inspectedCount,
       inspectedPercent: computePercent(inspectedCount, totalObjectsCount),
-      violationPercent: computePercent(objectWithViolationsCount, totalObjectsCount),
+      violationPercent: computePercent(objectsWithDetectedViolationsCount, inspectedCount),
       totalViolations: totalViolationsCount,
       currentViolations: currentViolationsCount,
       previousControl: previousControlCount,
@@ -1251,7 +1268,7 @@ function buildReport(periods) {
 
     totals.totalObjects += totalObjectsCount;
     totals.inspectedObjects += inspectedCount;
-    totals.objectsWithViolations += objectWithViolationsCount;
+    totals.objectsWithDetectedViolations += objectsWithDetectedViolationsCount;
     for (const id of entry.currentViolationIds) {
       totals.currentViolations.add(id);
     }
@@ -1277,7 +1294,7 @@ function buildReport(periods) {
     totalObjects: totals.totalObjects,
     inspectedObjects: totals.inspectedObjects,
     inspectedPercent: computePercent(totals.inspectedObjects, totals.totalObjects),
-    violationPercent: computePercent(totals.objectsWithViolations, totals.totalObjects),
+    violationPercent: computePercent(totals.objectsWithDetectedViolations, totals.inspectedObjects),
     totalViolations: totals.totalViolations.size,
     currentViolations: totals.currentViolations.size,
     previousControl: totals.previousControl.size,
