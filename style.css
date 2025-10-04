@@ -227,13 +227,15 @@ legend {
   color: var(--text-secondary);
 }
 
-.type-options {
+.type-options,
+.violation-options {
   display: grid;
   gap: 0.55rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.type-options label {
+.type-options label,
+.violation-options label {
   flex-direction: row;
   align-items: center;
   gap: 0.45rem;
