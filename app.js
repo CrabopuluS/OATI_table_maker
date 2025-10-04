@@ -33,6 +33,7 @@ const DISTRICT_FALLBACK_KEY = 'без округа';
 const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
   { key: 'status', label: 'Статус нарушения', candidates: ['статус нарушения', 'статус'] },
+  { key: 'violationName', label: 'Наименование нарушения', candidates: ['наименование нарушения', 'нарушение'] },
   { key: 'objectType', label: 'Тип объекта', candidates: ['тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'inspectionDate', label: 'Дата обследования', candidates: ['дата обследования', 'дата осмотра', 'дата контроля'] },
@@ -57,6 +58,9 @@ const state = {
   typeMode: 'all',
   customTypes: [],
   availableTypes: [],
+  violationMode: 'all',
+  customViolations: [],
+  availableViolations: [],
   availableDates: [],
   lastReport: null,
   lastPeriods: null,
@@ -81,6 +85,8 @@ const elements = {
   previousEnd: document.getElementById('previous-end'),
   typeOptions: document.getElementById('type-options'),
   typeMessage: document.getElementById('type-message'),
+  violationOptions: document.getElementById('violation-options'),
+  violationMessage: document.getElementById('violation-message'),
   previewMessage: document.getElementById('preview-message'),
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
@@ -141,6 +147,22 @@ for (const radio of typeModeRadios) {
       state.customTypes = [];
     }
     renderTypeOptions();
+    schedulePreviewUpdate();
+  });
+}
+
+const violationModeRadios = Array.from(document.querySelectorAll('input[name="violation-mode"]'));
+for (const radio of violationModeRadios) {
+  radio.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    state.violationMode = target.value;
+    if (state.violationMode === 'all') {
+      state.customViolations = [];
+    }
+    renderViolationOptions();
     schedulePreviewUpdate();
   });
 }
@@ -433,6 +455,16 @@ function updateAvailableFilters() {
   // Очищаю выбор от устаревших значений, если пользователь менял сопоставление колонок.
   state.customTypes = state.customTypes.filter((value) => state.availableTypes.includes(value));
   renderTypeOptions();
+  const violationNameColumn = state.violationMapping.violationName;
+  if (violationNameColumn) {
+    const violationNames = collectUniqueValues(state.violations, violationNameColumn).sort((a, b) => a.localeCompare(b, 'ru'));
+    state.availableViolations = violationNames;
+    state.customViolations = state.customViolations.filter((value) => state.availableViolations.includes(value));
+  } else {
+    state.availableViolations = [];
+    state.customViolations = [];
+  }
+  renderViolationOptions();
 }
 
 function updateDateSelect(select, dates, defaultIndex) {
@@ -518,6 +550,59 @@ function handleTypeSelection(checkbox) {
   schedulePreviewUpdate();
 }
 
+function renderViolationOptions() {
+  if (!elements.violationOptions || !elements.violationMessage) {
+    return;
+  }
+  elements.violationOptions.innerHTML = '';
+  elements.violationMessage.textContent = '';
+  if (!state.availableViolations.length) {
+    elements.violationOptions.textContent = 'Наименования нарушений не найдены.';
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  const selectedSet = new Set(state.customViolations);
+  for (const violation of state.availableViolations) {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = violation;
+    input.checked = selectedSet.has(violation);
+    input.disabled = state.violationMode !== 'custom';
+    input.addEventListener('change', () => handleViolationSelection(input));
+    const text = document.createElement('span');
+    text.textContent = violation;
+    label.append(input, text);
+    fragment.append(label);
+  }
+  elements.violationOptions.append(fragment);
+  if (state.violationMode !== 'custom') {
+    const checkboxes = elements.violationOptions.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach((checkbox) => {
+      checkbox.checked = false;
+    });
+  }
+}
+
+function handleViolationSelection(checkbox) {
+  if (!(checkbox instanceof HTMLInputElement)) {
+    return;
+  }
+  const violation = checkbox.value;
+  if (checkbox.checked) {
+    if (state.customViolations.length >= 5) {
+      checkbox.checked = false;
+      elements.violationMessage.textContent = 'Можно выбрать не более пяти наименований нарушений.';
+      return;
+    }
+    state.customViolations.push(violation);
+  } else {
+    state.customViolations = state.customViolations.filter((value) => value !== violation);
+  }
+  elements.violationMessage.textContent = '';
+  schedulePreviewUpdate();
+}
+
 // Управляю состоянием кнопки выгрузки, чтобы не давать скачивать устаревшие данные.
 function setExportAvailability(isEnabled) {
   if (!elements.downloadButton) {
@@ -586,6 +671,11 @@ function runPreviewUpdate() {
   }
   if (state.typeMode === 'custom' && !state.customTypes.length) {
     showPreviewMessage('Выберите типы объектов для пользовательского режима.');
+    clearTable();
+    return;
+  }
+  if (state.violationMode === 'custom' && !state.customViolations.length) {
+    showPreviewMessage('Выберите наименования нарушений для пользовательского режима.');
     clearTable();
     return;
   }
@@ -747,6 +837,7 @@ function buildReport(periods) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
   const typePredicate = createTypePredicate();
+  const violationPredicate = createViolationPredicate();
   // Здесь буду копить агрегированные данные по округам.
   const districtData = new Map();
   const districtLookup = buildDistrictLookup(
@@ -780,6 +871,25 @@ function buildReport(periods) {
     return districtData.get(aggregatedKey);
   };
 
+  const allowedViolationObjects = new Set();
+  if (state.violationMode === 'custom' && state.customViolations.length) {
+    const violationNameColumn = violationMapping.violationName;
+    const violationObjectNameColumn = violationMapping.objectName;
+    if (violationNameColumn && violationObjectNameColumn) {
+      for (const record of state.violations) {
+        const violationName = getValueAsString(record[violationNameColumn]);
+        if (!violationName || !violationPredicate(violationName)) {
+          continue;
+        }
+        const relatedObjectName = getValueAsString(record[violationObjectNameColumn]);
+        if (!relatedObjectName) {
+          continue;
+        }
+        allowedViolationObjects.add(normalizeKey(relatedObjectName));
+      }
+    }
+  }
+
   // Сначала прохожусь по объектам и считаю общее количество по округам.
   for (const record of state.objects) {
     const typeValue = getValueAsString(record[objectMapping.objectType]);
@@ -793,6 +903,14 @@ function buildReport(periods) {
     const objectName = getValueAsString(record[objectMapping.objectName]);
     if (!objectName) {
       continue;
+    }
+    if (state.violationMode === 'custom') {
+      if (!allowedViolationObjects.size) {
+        continue;
+      }
+      if (!allowedViolationObjects.has(normalizeKey(objectName))) {
+        continue;
+      }
     }
     const entry = ensureEntry(districtLabel);
     entry.totalObjects.add(objectName);
@@ -811,6 +929,13 @@ function buildReport(periods) {
     const objectName = getValueAsString(record[violationMapping.objectName]);
     const violationId = getValueAsString(record[violationMapping.id]);
     const status = getValueAsString(record[violationMapping.status]);
+    const violationName = getValueAsString(record[violationMapping.violationName]);
+    if (violationName && !violationPredicate(violationName)) {
+      continue;
+    }
+    if (!violationName && state.violationMode === 'custom') {
+      continue;
+    }
     const normalizedStatus = normalizeText(status);
     const dateValue = record[violationMapping.inspectionDate];
     const inspectionDate = parseDateValue(dateValue);
@@ -1024,6 +1149,14 @@ function createTypePredicate() {
   return (value) => allowed.has(normalizeKey(value));
 }
 
+function createViolationPredicate() {
+  if (state.violationMode === 'all' || !state.customViolations.length) {
+    return () => true;
+  }
+  const allowed = new Set(state.customViolations.map((value) => normalizeKey(value)));
+  return (value) => allowed.has(normalizeKey(value));
+}
+
 // Универсальный способ привести строку к нижнему регистру и убрать лишние пробелы.
 function normalizeKey(value) {
   if (value === null || value === undefined) {
@@ -1188,12 +1321,16 @@ function exportReportToExcel(report, periods) {
     const typeDescription = state.typeMode === 'custom' && state.customTypes.length
       ? `Выбранные типы объектов: ${state.customTypes.join(', ')}`
       : 'Все типы объектов контроля';
+    const violationDescription = state.violationMode === 'custom' && state.customViolations.length
+      ? `Выбранные нарушения: ${state.customViolations.join(', ')}`
+      : 'Все наименования нарушений';
 
     // Шапка будущего листа: заголовок, описания периодов и выбранных типов.
     aoa.push([title]);
     aoa.push(['Отчётный период', formatPeriodRange(periods.current)]);
     aoa.push(['Предыдущий период', formatPeriodRange(periods.previous)]);
     aoa.push([typeDescription]);
+    aoa.push([violationDescription]);
     aoa.push([]);
 
     const headerRowIndex = aoa.length;
@@ -1211,6 +1348,7 @@ function exportReportToExcel(report, periods) {
       { s: { r: 1, c: 1 }, e: { r: 1, c: columnCount - 1 } },
       { s: { r: 2, c: 1 }, e: { r: 2, c: columnCount - 1 } },
       { s: { r: 3, c: 0 }, e: { r: 3, c: columnCount - 1 } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: columnCount - 1 } },
     ];
     sheet['!cols'] = headers.map((_, index) => ({
       wch: index === 0 ? 28 : 18,
@@ -1265,6 +1403,7 @@ function exportReportToExcel(report, periods) {
     setCellStyle(sheet, 2, 0, metaLabelStyle);
     setCellStyle(sheet, 2, 1, metaValueStyle);
     setCellStyle(sheet, 3, 0, scopeStyle);
+    setCellStyle(sheet, 4, 0, scopeStyle);
 
     for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
       setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);

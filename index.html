@@ -107,8 +107,22 @@
           <div id="type-options" class="type-options" aria-live="polite"></div>
           <p id="type-message" class="hint" role="status" aria-live="polite"></p>
         </fieldset>
+        <fieldset>
+          <legend>Наименования нарушений</legend>
+          <label class="inline-option">
+            <input type="radio" name="violation-mode" value="all" checked />
+            Все наименования
+          </label>
+          <label class="inline-option">
+            <input type="radio" name="violation-mode" value="custom" />
+            Выбрать до пяти наименований
+          </label>
+          <div id="violation-options" class="violation-options" aria-live="polite"></div>
+          <p id="violation-message" class="hint" role="status" aria-live="polite"></p>
+        </fieldset>
       </div>
       <p class="hint">При выборе пользовательских типов можно отметить не более трех значений.</p>
+      <p class="hint">Для пользовательского выбора нарушений доступно до пяти наименований.</p>
     </section>
 
     <!-- Предпросмотр и управление выгрузкой отчёта. -->
