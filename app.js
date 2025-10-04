@@ -105,6 +105,8 @@ const elements = {
   downloadButton: document.getElementById('download-report'),
   themeToggle: document.getElementById('theme-toggle'),
   themeToggleLabel: document.getElementById('theme-toggle-text'),
+  creditBadge: document.querySelector('.credit-badge'),
+  creditBadgeClose: document.querySelector('.credit-badge__close'),
 };
 
 const THEME_STORAGE_KEY = 'oati-theme-preference';
@@ -189,6 +191,13 @@ function initTheme() {
       themeMediaQuery.addListener(handleMediaChange);
     }
   }
+}
+
+if (elements.creditBadge && elements.creditBadgeClose) {
+  elements.creditBadgeClose.addEventListener('click', () => {
+    elements.creditBadge.hidden = true;
+    elements.creditBadge.setAttribute('aria-hidden', 'true');
+  });
 }
 
 // Форматер чисел, чтобы везде были привычные для отчётов пробелы.
