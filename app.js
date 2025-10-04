@@ -520,59 +520,241 @@ function updateDateSelect(select, dates, defaultIndex) {
   select.value = nextValue;
 }
 
-// По текущему списку типов рисую чекбоксы и учитываю выбранный режим.
-function renderTypeOptions() {
-  elements.typeOptions.innerHTML = '';
-  elements.typeMessage.textContent = '';
-  if (!state.availableTypes.length) {
-    elements.typeOptions.textContent = 'Типы объектов не найдены.';
+function renderSearchableMultiselect(options) {
+  const {
+    container,
+    values,
+    selectedValues,
+    disabled,
+    placeholder,
+    emptyLabel,
+    limit,
+    limitMessage,
+    messageElement,
+    onAdd,
+    onRemove,
+  } = options;
+  if (!container) {
     return;
   }
-  const fragment = document.createDocumentFragment();
-  const selectedSet = new Set(state.customTypes);
-  for (const type of state.availableTypes) {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.value = type;
-    input.checked = selectedSet.has(type);
-    input.disabled = state.typeMode !== 'custom';
-    input.addEventListener('change', () => handleTypeSelection(input));
-    const text = document.createElement('span');
-    text.textContent = type;
-    label.append(input, text);
-    fragment.append(label);
+  if (messageElement) {
+    messageElement.textContent = '';
   }
-  elements.typeOptions.append(fragment);
-  if (state.typeMode !== 'custom') {
-    const checkboxes = elements.typeOptions.querySelectorAll('input[type="checkbox"]');
-    checkboxes.forEach((checkbox) => {
-      checkbox.checked = false;
+  container.innerHTML = '';
+  container.classList.remove('multi-select-empty');
+  if (!values.length) {
+    container.textContent = emptyLabel;
+    container.classList.add('multi-select-empty');
+    return;
+  }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'multi-select';
+  if (disabled) {
+    wrapper.classList.add('is-disabled');
+  }
+  const field = document.createElement('div');
+  field.className = 'multi-select-field';
+  const tags = document.createElement('div');
+  tags.className = 'multi-select-tags';
+  for (const value of selectedValues) {
+    const tag = document.createElement('span');
+    tag.className = 'multi-select-tag';
+    tag.textContent = value;
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'multi-select-tag-remove';
+    removeButton.setAttribute('aria-label', `Удалить «${value}»`);
+    removeButton.textContent = '×';
+    removeButton.disabled = disabled;
+    removeButton.addEventListener('click', () => {
+      onRemove?.(value);
+    });
+    tag.append(removeButton);
+    tags.append(tag);
+  }
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'multi-select-input';
+  input.placeholder = disabled ? 'Активируйте пользовательский режим' : placeholder;
+  input.autocomplete = 'off';
+  input.disabled = disabled;
+  field.append(tags, input);
+  wrapper.append(field);
+  const dropdown = document.createElement('div');
+  dropdown.className = 'multi-select-dropdown';
+  wrapper.append(dropdown);
+  container.append(wrapper);
+  const selectedSet = new Set(selectedValues);
+
+  const renderDropdown = () => {
+    dropdown.innerHTML = '';
+    if (disabled) {
+      const note = document.createElement('p');
+      note.className = 'multi-select-note';
+      note.textContent = 'Переключите режим «Выбрать», чтобы воспользоваться поиском и выбором.';
+      dropdown.append(note);
+      return;
+    }
+    const query = input.value.trim().toLowerCase();
+    const filtered = values.filter((value) => !selectedSet.has(value) && value.toLowerCase().includes(query));
+    if (!filtered.length) {
+      const empty = document.createElement('p');
+      empty.className = 'multi-select-note';
+      empty.textContent = query ? 'Совпадений не найдено.' : 'Все значения уже добавлены.';
+      dropdown.append(empty);
+      return;
+    }
+    const canAddMore = selectedValues.length < limit;
+    if (!canAddMore) {
+      if (messageElement) {
+        messageElement.textContent = limitMessage;
+      }
+    } else if (messageElement && messageElement.textContent === limitMessage) {
+      messageElement.textContent = '';
+    }
+    for (const value of filtered) {
+      const optionButton = document.createElement('button');
+      optionButton.type = 'button';
+      optionButton.className = 'multi-select-option';
+      optionButton.textContent = value;
+      optionButton.disabled = !canAddMore;
+      optionButton.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+      });
+      optionButton.addEventListener('click', () => {
+        if (!canAddMore) {
+          if (messageElement) {
+            messageElement.textContent = limitMessage;
+          }
+          return;
+        }
+        onAdd?.(value);
+      });
+      dropdown.append(optionButton);
+    }
+  };
+
+  renderDropdown();
+
+  if (!disabled) {
+    const openDropdown = () => {
+      wrapper.classList.add('is-open');
+      renderDropdown();
+    };
+    const closeDropdown = () => {
+      wrapper.classList.remove('is-open');
+      input.value = '';
+      renderDropdown();
+    };
+    wrapper.addEventListener('mousedown', (event) => {
+      if (event.target === wrapper || event.target === field || event.target === tags) {
+        event.preventDefault();
+        input.focus();
+      }
+    });
+    input.addEventListener('focus', openDropdown);
+    input.addEventListener('input', openDropdown);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const query = input.value.trim().toLowerCase();
+        const candidates = values.filter((value) => !selectedSet.has(value) && value.toLowerCase().includes(query));
+        if (!candidates.length) {
+          return;
+        }
+        if (selectedValues.length >= limit) {
+          if (messageElement) {
+            messageElement.textContent = limitMessage;
+          }
+          return;
+        }
+        onAdd?.(candidates[0]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDropdown();
+      }
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        closeDropdown();
+      }, 120);
     });
   }
 }
 
-// Обрабатываю выбор конкретного типа объекта, следя за ограничением в три позиции.
-function handleTypeSelection(checkbox) {
-  if (!(checkbox instanceof HTMLInputElement)) {
-    return;
-  }
-  const type = checkbox.value;
-  if (checkbox.checked) {
-    if (state.customTypes.length >= 3) {
-      checkbox.checked = false;
-      // Как только пользователь пытается выбрать четвёртый тип — возвращаю чекбокс обратно и вывожу подсказку.
-      elements.typeMessage.textContent = 'Можно выбрать не более трех типов объектов.';
-      return;
-    }
-    state.customTypes.push(type);
-  } else {
-    state.customTypes = state.customTypes.filter((value) => value !== type);
-  }
-  elements.typeMessage.textContent = '';
-  schedulePreviewUpdate();
+function renderTypeOptions() {
+  renderSearchableMultiselect({
+    container: elements.typeOptions,
+    values: state.availableTypes,
+    selectedValues: state.customTypes,
+    disabled: state.typeMode !== 'custom',
+    placeholder: 'Начните вводить тип объекта…',
+    emptyLabel: 'Типы объектов не найдены.',
+    limit: 3,
+    limitMessage: 'Можно выбрать не более трех типов объектов.',
+    messageElement: elements.typeMessage,
+    onAdd: (value) => {
+      if (state.customTypes.includes(value) || state.customTypes.length >= 3) {
+        if (elements.typeMessage) {
+          elements.typeMessage.textContent = 'Можно выбрать не более трех типов объектов.';
+        }
+        return;
+      }
+      state.customTypes = [...state.customTypes, value];
+      if (elements.typeMessage) {
+        elements.typeMessage.textContent = '';
+      }
+      schedulePreviewUpdate();
+      renderTypeOptions();
+    },
+    onRemove: (value) => {
+      state.customTypes = state.customTypes.filter((item) => item !== value);
+      if (elements.typeMessage) {
+        elements.typeMessage.textContent = '';
+      }
+      schedulePreviewUpdate();
+      renderTypeOptions();
+    },
+  });
 }
 
+function renderViolationOptions() {
+  renderSearchableMultiselect({
+    container: elements.violationOptions,
+    values: state.availableViolations,
+    selectedValues: state.customViolations,
+    disabled: state.violationMode !== 'custom',
+    placeholder: 'Поиск наименования нарушения…',
+    emptyLabel: 'Наименования нарушений не найдены.',
+    limit: 5,
+    limitMessage: 'Можно выбрать не более пяти наименований нарушений.',
+    messageElement: elements.violationMessage,
+    onAdd: (value) => {
+      if (state.customViolations.includes(value) || state.customViolations.length >= 5) {
+        if (elements.violationMessage) {
+          elements.violationMessage.textContent = 'Можно выбрать не более пяти наименований нарушений.';
+        }
+        return;
+      }
+      state.customViolations = [...state.customViolations, value];
+      if (elements.violationMessage) {
+        elements.violationMessage.textContent = '';
+      }
+      schedulePreviewUpdate();
+      renderViolationOptions();
+    },
+    onRemove: (value) => {
+      state.customViolations = state.customViolations.filter((item) => item !== value);
+      if (elements.violationMessage) {
+        elements.violationMessage.textContent = '';
+      }
+      schedulePreviewUpdate();
+      renderViolationOptions();
+    },
+  });
+}
+
+// Настройки источника данных требуют отдельной обработки.
 function updateDataSourceControl() {
   if (!elements.dataSourceSelect || !elements.dataSourceMessage) {
     return;
@@ -623,59 +805,6 @@ function summarizeDataSourceCategories(column) {
     }
   }
   return summary;
-}
-
-function renderViolationOptions() {
-  if (!elements.violationOptions || !elements.violationMessage) {
-    return;
-  }
-  elements.violationOptions.innerHTML = '';
-  elements.violationMessage.textContent = '';
-  if (!state.availableViolations.length) {
-    elements.violationOptions.textContent = 'Наименования нарушений не найдены.';
-    return;
-  }
-  const fragment = document.createDocumentFragment();
-  const selectedSet = new Set(state.customViolations);
-  for (const violation of state.availableViolations) {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.value = violation;
-    input.checked = selectedSet.has(violation);
-    input.disabled = state.violationMode !== 'custom';
-    input.addEventListener('change', () => handleViolationSelection(input));
-    const text = document.createElement('span');
-    text.textContent = violation;
-    label.append(input, text);
-    fragment.append(label);
-  }
-  elements.violationOptions.append(fragment);
-  if (state.violationMode !== 'custom') {
-    const checkboxes = elements.violationOptions.querySelectorAll('input[type="checkbox"]');
-    checkboxes.forEach((checkbox) => {
-      checkbox.checked = false;
-    });
-  }
-}
-
-function handleViolationSelection(checkbox) {
-  if (!(checkbox instanceof HTMLInputElement)) {
-    return;
-  }
-  const violation = checkbox.value;
-  if (checkbox.checked) {
-    if (state.customViolations.length >= 5) {
-      checkbox.checked = false;
-      elements.violationMessage.textContent = 'Можно выбрать не более пяти наименований нарушений.';
-      return;
-    }
-    state.customViolations.push(violation);
-  } else {
-    state.customViolations = state.customViolations.filter((value) => value !== violation);
-  }
-  elements.violationMessage.textContent = '';
-  schedulePreviewUpdate();
 }
 
 // Управляю состоянием кнопки выгрузки, чтобы не давать скачивать устаревшие данные.
