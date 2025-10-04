@@ -15,21 +15,38 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="app.js" type="module" defer></script>
 </head>
-<body>
+<body class="theme-light">
   <!-- Шапка приложения: приветственный блок с кратким описанием. -->
   <header class="app-header">
-    <div class="header-brand">
-      <img src="дизайн/ЛОГО.svg" alt="Логотип Контроль Москвы" class="brand-logo" />
-      <div class="brand-text">
-        <span class="brand-tag">Контроль Москвы</span>
-        <h1>Конструктор отчетных таблиц ОАТИ</h1>
+    <div class="header-top">
+      <div class="header-brand">
+        <img src="дизайн/ЛОГО.svg" alt="Логотип Контроль Москвы" class="brand-logo" />
+        <div class="brand-text">
+          <span class="brand-tag">Контроль Москвы</span>
+          <h1>Конструктор отчетных таблиц ОАТИ</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
+          <span class="theme-toggle__glow" aria-hidden="true"></span>
+          <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true"></span>
+          <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true"></span>
+          <span class="theme-toggle__label" id="theme-toggle-text">Темный режим</span>
+        </button>
       </div>
     </div>
     <p class="header-subtitle">
-      Единая рабочая среда для формирования отчетов: загрузите исходные данные, сопоставьте поля и получите сверстанный файл
-      за несколько кликов.
+      Единая рабочая среда для формирования отчетов: загрузите исходные данные, сопоставьте поля и получите сверстанный файл за
+      несколько кликов.
     </p>
   </header>
+
+  <aside class="credit-badge" aria-label="Информация о разработчиках">
+    <span class="credit-badge__title">Разработано</span>
+    <span class="credit-badge__body"
+      >Отделом развития информационных систем и внедрения цифровых продуктов Информационно-аналитического управления</span
+    >
+  </aside>
 
   <main class="app-main">
     <!-- Блок загрузки исходных таблиц. -->
