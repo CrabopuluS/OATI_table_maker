@@ -2,6 +2,7 @@
 :root {
   --brand-primary: #8f1b49;
   --brand-primary-dark: #6d1436;
+  --brand-primary-fade: rgba(143, 27, 73, 0.3);
   --brand-primary-soft: #f4e6ec;
   --brand-primary-soft-strong: rgba(143, 27, 73, 0.16);
   --surface-base: #f5f4f7;
@@ -57,6 +58,8 @@
 }
 
 body.theme-dark {
+  --brand-primary: #ff6f9e;
+  --brand-primary-dark: #ff4f8a;
   --surface-base: #0f1118;
   --surface-card: #181b24;
   --surface-card-elevated: #1f2532;
@@ -75,8 +78,8 @@ body.theme-dark {
   --control-surface-strong: #181b24;
   --control-surface-muted: rgba(33, 39, 52, 0.65);
   --chip-remove-background: rgba(21, 24, 34, 0.65);
-  --brand-primary-soft: rgba(143, 27, 73, 0.26);
-  --brand-primary-soft-strong: rgba(143, 27, 73, 0.38);
+  --brand-primary-soft: rgba(255, 111, 158, 0.28);
+  --brand-primary-soft-strong: rgba(255, 111, 158, 0.42);
   --table-header-bg: rgba(143, 27, 73, 0.32);
   --table-row-alt: rgba(143, 27, 73, 0.16);
   --table-footer-bg: rgba(143, 27, 73, 0.28);
@@ -105,7 +108,8 @@ body.theme-dark {
   --inline-option-radio-bg: rgba(18, 21, 33, 0.85);
   --theme-toggle-sun: #fbd891;
   --theme-toggle-moon: #d4ddff;
-  --theme-toggle-glow: rgba(143, 27, 73, 0.35);
+  --brand-primary-fade: rgba(255, 111, 158, 0.32);
+  --theme-toggle-glow: rgba(255, 111, 158, 0.4);
   color-scheme: dark;
 }
 
@@ -196,14 +200,13 @@ img {
 
 .credit-badge {
   position: fixed;
-  top: 50%;
-  right: max(1.5rem, calc((100vw - 1200px) / 2 - 1.5rem));
-  transform: translateY(-50%);
+  bottom: 2rem;
+  right: max(1.5rem, calc((100vw - 1200px) / 2));
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  width: 280px;
-  padding: 1.1rem 1.25rem;
+  gap: 0.6rem;
+  width: 300px;
+  padding: 1.1rem 1.25rem 1.25rem;
   border-radius: 20px;
   background: var(--badge-background);
   border: 1px solid var(--badge-border);
@@ -212,7 +215,11 @@ img {
   backdrop-filter: blur(14px);
   z-index: 20;
   line-height: 1.4;
-  transition: background 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
+  transition: background 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease, opacity 0.3s ease;
+}
+
+.credit-badge[hidden] {
+  display: none;
 }
 
 .credit-badge__title {
@@ -227,6 +234,38 @@ img {
   font-size: 0.92rem;
   font-weight: 600;
   color: var(--badge-text);
+}
+
+.credit-badge__close {
+  align-self: flex-end;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--brand-primary);
+  background: linear-gradient(135deg, var(--brand-primary-soft), transparent 65%);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.credit-badge__close:hover,
+.credit-badge__close:focus-visible {
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  border-color: var(--brand-primary-dark);
+  outline: none;
+  box-shadow: 0 0 0 4px var(--focus-outline);
+}
+
+@media (max-width: 1024px) {
+  .credit-badge {
+    position: static;
+    width: min(100%, 360px);
+    margin: 1.5rem auto 0;
+  }
 }
 
 .theme-toggle {
