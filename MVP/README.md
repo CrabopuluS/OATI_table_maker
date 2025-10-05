@@ -11,6 +11,12 @@ python -m MVP.main
 
 Перед запуском убедитесь, что установлен пакет `openpyxl` (используется для чтения и записи Excel).
 
+При необходимости можно запустить файл напрямую:
+
+```bash
+python MVP/main.py
+```
+
 ## Возможности
 
 - Загрузка выгрузки нарушений и перечня объектов без сети.
@@ -24,3 +30,15 @@ python -m MVP.main
 ```bash
 pytest MVP/tests/test_report_builder.py
 ```
+
+## Сборка исполняемого файла
+
+Для формирования автономного `.exe`-файла под Windows рекомендуется использовать [PyInstaller](https://pyinstaller.org). Выполните команды в корне проекта в среде Windows с установленными зависимостями:
+
+```bash
+pip install -r requirements.txt  # при необходимости создайте виртуальное окружение
+pip install pyinstaller
+pyinstaller --noconsole --onefile --name OATI_Table_MVP MVP/main.py
+```
+
+Готовый исполняемый файл появится в каталоге `dist/OATI_Table_MVP.exe`. Если требуется включить дополнительные файлы (например, шаблоны), их можно добавить через ключ `--add-data` PyInstaller.
