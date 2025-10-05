@@ -5,7 +5,6 @@ const CONTROL_STATUS_SET = new Set(CONTROL_STATUSES);
 const RESOLVED_STATUS = 'снят с контроля';
 const INSPECTION_RESULT_VIOLATION = 'нарушение выявлено';
 
-// Допустимые расширения файлов Excel, которые умеет обрабатывать библиотека.
 // Ограничения по работе с файлами: защищают приложение от чрезмерных ресурсов и потенциальных атак.
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024; // 10 МиБ.
 const MAX_ROWS_PER_SHEET = 20000;
@@ -155,7 +154,6 @@ function getFileExtension(fileName) {
 }
 
 /**
- * Проверяет файл перед чтением: убеждаюсь, что он существует и имеет допустимое расширение.
  * Преобразует размер файла в человекочитаемый формат (байты → КиБ/МиБ и т.д.).
  * @param {number} bytes исходное количество байтов
  * @returns {string} строка вида «1,5 МиБ»
@@ -915,8 +913,6 @@ async function readExcelFile(file, headerKeywords) {
     throw new Error('Не удалось определить строку заголовков.');
   }
   const headers = extractHeaderRow(sheet, headerRowIndex, range);
-  await yieldToEventLoop();
-  const records = extractRecords(sheet, headerRowIndex, headers);
   if (headers.length > MAX_COLUMNS_PER_SHEET) {
     throw new Error(
       `Файл содержит ${numberFormatter.format(headers.length)} столбцов. Допустимо не более ${numberFormatter.format(MAX_COLUMNS_PER_SHEET)}.`,
@@ -1010,12 +1006,15 @@ function extractHeaderRow(sheet, rowIndex, range) {
 
 /**
  * Формирует массив объектов данных на основе заголовков, пропуская полностью пустые строки.
+ * Дополнительно ограничивает число обрабатываемых строк для защиты производительности.
  * @param {XLSX.WorkSheet} sheet лист Excel
  * @param {number} headerRowIndex индекс строки заголовков
  * @param {string[]} headers список заголовков
+ * @param {{ maxRows?: number }} [options] ограничения на количество строк
  * @returns {Record<string, unknown>[]} массив строк данных
  */
-function extractRecords(sheet, headerRowIndex, headers) {
+function extractRecords(sheet, headerRowIndex, headers, options = {}) {
+  const { maxRows = Infinity } = options;
   const range = XLSX.utils.decode_range(sheet['!ref']);
   const records = [];
   for (let rowIndex = headerRowIndex + 1; rowIndex <= range.e.r; rowIndex += 1) {
