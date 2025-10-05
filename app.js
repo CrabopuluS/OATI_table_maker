@@ -6,6 +6,10 @@ const RESOLVED_STATUS = 'снят с контроля';
 const INSPECTION_RESULT_VIOLATION = 'нарушение выявлено';
 
 // Допустимые расширения файлов Excel, которые умеет обрабатывать библиотека.
+// Ограничения по работе с файлами: защищают приложение от чрезмерных ресурсов и потенциальных атак.
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024; // 10 МиБ.
+const MAX_ROWS_PER_SHEET = 20000;
+const MAX_COLUMNS_PER_SHEET = 120;
 const ALLOWED_FILE_EXTENSIONS = new Set(['xlsx', 'xls', 'xlsm']);
 
 // Универсальный форматтер чисел: используется в интерфейсе и в сообщениях об ошибках.
@@ -152,6 +156,34 @@ function getFileExtension(fileName) {
 
 /**
  * Проверяет файл перед чтением: убеждаюсь, что он существует и имеет допустимое расширение.
+ * Преобразует размер файла в человекочитаемый формат (байты → КиБ/МиБ и т.д.).
+ * @param {number} bytes исходное количество байтов
+ * @returns {string} строка вида «1,5 МиБ»
+ */
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 байт';
+  }
+  const units = ['байт', 'КиБ', 'МиБ', 'ГиБ'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  if (unitIndex === 0) {
+    return `${numberFormatter.format(Math.round(value))} ${units[unitIndex]}`;
+  }
+  const isInteger = Number.isInteger(value);
+  if (isInteger || value >= 10) {
+    return `${numberFormatter.format(Math.round(value))} ${units[unitIndex]}`;
+  }
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded.toString().replace('.', ',')} ${units[unitIndex]}`;
+}
+
+/**
+ * Проверяет файл перед чтением: размер, расширение и пустоту.
  * Бросает Error с дружелюбным сообщением, если файл не подходит.
  * @param {File} file объект файла из input[type="file"]
  * @param {string} displayName подготовленное имя для сообщений
@@ -163,6 +195,11 @@ function assertValidFile(file, displayName) {
   }
   if (!file || file.size === 0) {
     throw new Error(`Файл «${safeName}» пуст или недоступен. Выберите другой документ.`);
+  }
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    throw new Error(
+      `Файл «${safeName}» превышает допустимый размер ${formatBytes(MAX_UPLOAD_SIZE_BYTES)}. Уменьшите выгрузку или разделите данные.`,
+    );
   }
   const extension = getFileExtension(file.name);
   if (extension && !ALLOWED_FILE_EXTENSIONS.has(extension)) {
@@ -880,6 +917,13 @@ async function readExcelFile(file, headerKeywords) {
   const headers = extractHeaderRow(sheet, headerRowIndex, range);
   await yieldToEventLoop();
   const records = extractRecords(sheet, headerRowIndex, headers);
+  if (headers.length > MAX_COLUMNS_PER_SHEET) {
+    throw new Error(
+      `Файл содержит ${numberFormatter.format(headers.length)} столбцов. Допустимо не более ${numberFormatter.format(MAX_COLUMNS_PER_SHEET)}.`,
+    );
+  }
+  await yieldToEventLoop();
+  const records = extractRecords(sheet, headerRowIndex, headers, { maxRows: MAX_ROWS_PER_SHEET });
   return { records, headers };
 }
 
@@ -992,6 +1036,11 @@ function extractRecords(sheet, headerRowIndex, headers) {
     }
     if (hasValue) {
       records.push(record);
+      if (records.length > maxRows) {
+        throw new Error(
+          `Файл содержит более ${numberFormatter.format(maxRows)} строк с данными. Сократите выгрузку или используйте несколько файлов.`,
+        );
+      }
     }
   }
   return records;
