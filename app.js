@@ -105,6 +105,8 @@ const elements = {
   downloadButton: document.getElementById('download-report'),
   themeToggle: document.getElementById('theme-toggle'),
   themeToggleLabel: document.getElementById('theme-toggle-text'),
+  brandLogo: document.querySelector('.brand-logo'),
+  easterEggMessage: document.getElementById('easter-egg-message'),
   creditBadge: document.querySelector('.credit-badge'),
   creditBadgeClose: document.querySelector('.credit-badge__close'),
 };
@@ -535,6 +537,42 @@ function initTheme() {
       themeMediaQuery.addListener(handleMediaChange);
     }
   }
+}
+
+if (elements.brandLogo && elements.easterEggMessage) {
+  let hideMessageTimer = null;
+  let concealMessageTimer = null;
+
+  const scheduleHide = () => {
+    if (hideMessageTimer) {
+      window.clearTimeout(hideMessageTimer);
+    }
+    hideMessageTimer = window.setTimeout(() => {
+      elements.easterEggMessage.classList.remove('is-visible');
+      if (concealMessageTimer) {
+        window.clearTimeout(concealMessageTimer);
+      }
+      concealMessageTimer = window.setTimeout(() => {
+        elements.easterEggMessage.hidden = true;
+        concealMessageTimer = null;
+      }, 320);
+      hideMessageTimer = null;
+    }, 4000);
+  };
+
+  elements.brandLogo.addEventListener('dblclick', () => {
+    if (hideMessageTimer) {
+      window.clearTimeout(hideMessageTimer);
+      hideMessageTimer = null;
+    }
+    if (concealMessageTimer) {
+      window.clearTimeout(concealMessageTimer);
+      concealMessageTimer = null;
+    }
+    elements.easterEggMessage.hidden = false;
+    elements.easterEggMessage.classList.add('is-visible');
+    scheduleHide();
+  });
 }
 
 if (elements.creditBadge && elements.creditBadgeClose) {
