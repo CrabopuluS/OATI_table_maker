@@ -5,15 +5,6 @@ const CONTROL_STATUS_SET = new Set(CONTROL_STATUSES);
 const RESOLVED_STATUS = 'снят с контроля';
 const INSPECTION_RESULT_VIOLATION = 'нарушение выявлено';
 
-// Ограничения по работе с файлами: защищают приложение от чрезмерных ресурсов и потенциальных атак.
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024; // 10 МиБ.
-const MAX_ROWS_PER_SHEET = 20000;
-const MAX_COLUMNS_PER_SHEET = 120;
-const ALLOWED_FILE_EXTENSIONS = new Set(['xlsx', 'xls', 'xlsm']);
-
-// Универсальный форматтер чисел: используется в интерфейсе и в сообщениях об ошибках.
-const numberFormatter = new Intl.NumberFormat('ru-RU');
-
 // Список округов и их официальных сокращений держу в одном месте, чтобы дальше не размазывать магические строки.
 const MOSCOW_DISTRICT_ABBREVIATIONS = Object.freeze({
   'центральный административный округ': 'ЦАО',
@@ -119,134 +110,6 @@ const elements = {
   creditBadge: document.querySelector('.credit-badge'),
   creditBadgeClose: document.querySelector('.credit-badge__close'),
 };
-
-/**
- * Подготавливает имя файла для безопасного отображения в интерфейсе.
- * Убирает управляющие символы и чрезмерно длинные строки, чтобы предотвратить XSS и визуальный шум.
- * @param {string} rawName исходное имя файла из File API
- * @returns {string} отформатированное имя для показа пользователю
- */
-function sanitizeDisplayFileName(rawName) {
-  if (!rawName) {
-    return 'без названия';
-  }
-  const normalized = rawName.toString().replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '').trim();
-  if (!normalized) {
-    return 'без названия';
-  }
-  if (normalized.length > 60) {
-    return `${normalized.slice(0, 57)}…`;
-  }
-  return normalized;
-}
-
-/**
- * Возвращает расширение файла без точки.
- * @param {string} fileName имя файла
- * @returns {string} расширение в нижнем регистре
- */
-function getFileExtension(fileName) {
-  if (!fileName || typeof fileName !== 'string') {
-    return '';
-  }
-  const parts = fileName.split('.');
-  return parts.length > 1 ? parts.pop().toLowerCase() : '';
-}
-
-/**
- * Преобразует размер файла в человекочитаемый формат (байты → КиБ/МиБ и т.д.).
- * @param {number} bytes исходное количество байтов
- * @returns {string} строка вида «1,5 МиБ»
- */
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 байт';
-  }
-  const units = ['байт', 'КиБ', 'МиБ', 'ГиБ'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  if (unitIndex === 0) {
-    return `${numberFormatter.format(Math.round(value))} ${units[unitIndex]}`;
-  }
-  const isInteger = Number.isInteger(value);
-  if (isInteger || value >= 10) {
-    return `${numberFormatter.format(Math.round(value))} ${units[unitIndex]}`;
-  }
-  const rounded = Math.round(value * 10) / 10;
-  return `${rounded.toString().replace('.', ',')} ${units[unitIndex]}`;
-}
-
-/**
- * Проверяет файл перед чтением: размер, расширение и пустоту.
- * Бросает Error с дружелюбным сообщением, если файл не подходит.
- * @param {File} file объект файла из input[type="file"]
- * @param {string} displayName подготовленное имя для сообщений
- */
-function assertValidFile(file, displayName) {
-  const safeName = displayName || sanitizeDisplayFileName(file?.name);
-  if (typeof File !== 'undefined' && !(file instanceof File)) {
-    throw new Error('Не удалось прочитать выбранный файл. Попробуйте выбрать его повторно.');
-  }
-  if (!file || file.size === 0) {
-    throw new Error(`Файл «${safeName}» пуст или недоступен. Выберите другой документ.`);
-  }
-  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    throw new Error(
-      `Файл «${safeName}» превышает допустимый размер ${formatBytes(MAX_UPLOAD_SIZE_BYTES)}. Уменьшите выгрузку или разделите данные.`,
-    );
-  }
-  const extension = getFileExtension(file.name);
-  if (extension && !ALLOWED_FILE_EXTENSIONS.has(extension)) {
-    throw new Error(`Файл «${safeName}» имеет неподдерживаемое расширение. Используйте Excel в формате XLSX или XLS.`);
-  }
-}
-
-/**
- * Позволяет отдать управление потоку браузера перед тяжёлой операцией, чтобы интерфейс не зависал.
- * В первую очередь используется requestIdleCallback, при его отсутствии — короткий setTimeout.
- * @returns {Promise<void>} промис, который резолвится после уступки потока
- */
-async function yieldToEventLoop() {
-  if (typeof window !== 'undefined') {
-    if (typeof window.requestIdleCallback === 'function') {
-      await new Promise((resolve) => window.requestIdleCallback(() => resolve(), { timeout: 32 }));
-      return;
-    }
-    if (typeof window.requestAnimationFrame === 'function') {
-      await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
-      return;
-    }
-  }
-  await new Promise((resolve) => setTimeout(resolve, 16));
-}
-
-/**
- * Делает имена столбцов уникальными, чтобы значения из Excel не перезаписывали друг друга.
- * @param {string[]} headers массив исходных заголовков
- * @returns {string[]} массив уникальных заголовков
- */
-function makeHeadersUnique(headers) {
-  const counters = new Map();
-  return headers.map((header, index) => {
-    const source =
-      typeof header === 'string'
-        ? header.trim()
-        : header === null || header === undefined
-        ? ''
-        : header.toString().trim();
-    const normalized = source || `Колонка ${index + 1}`;
-    const currentCount = counters.get(normalized) ?? 0;
-    counters.set(normalized, currentCount + 1);
-    if (currentCount === 0) {
-      return normalized;
-    }
-    return `${normalized} (${currentCount + 1})`;
-  });
-}
 
 const MONTH_NAMES_RU = [
   'Январь',
@@ -719,6 +582,9 @@ if (elements.creditBadge && elements.creditBadgeClose) {
   });
 }
 
+// Форматер чисел, чтобы везде были привычные для отчётов пробелы.
+const numberFormatter = new Intl.NumberFormat('ru-RU');
+
 // Обработчики файлов
 if (elements.violationsInput) {
   // Когда пользователь подкидывает таблицу нарушений — читаем файл и обновляем состояние.
@@ -727,10 +593,9 @@ if (elements.violationsInput) {
     if (!file) {
       return;
     }
-    const displayName = sanitizeDisplayFileName(file.name);
-    setLoadingIndicator('violations', true, displayName);
+    setLoadingIndicator('violations', true, file.name);
     try {
-      await loadDataset('violations', file, { displayName });
+      await loadDataset('violations', file);
     } finally {
       setLoadingIndicator('violations', false);
     }
@@ -744,10 +609,9 @@ if (elements.objectsInput) {
     if (!file) {
       return;
     }
-    const displayName = sanitizeDisplayFileName(file.name);
-    setLoadingIndicator('objects', true, displayName);
+    setLoadingIndicator('objects', true, file.name);
     try {
-      await loadDataset('objects', file, { displayName });
+      await loadDataset('objects', file);
     } finally {
       setLoadingIndicator('objects', false);
     }
@@ -813,21 +677,11 @@ for (const radio of violationModeRadios) {
   });
 }
 
-/**
- * Загружает Excel-файл, валидирует его и обновляет состояние приложения.
- * Выполняет тяжёлые операции асинхронно, чтобы не блокировать интерфейс на слабых ПК.
- * @param {('violations'|'objects')} kind тип загружаемого датасета
- * @param {File} file файл Excel из input[type="file"]
- * @param {{ displayName?: string }} [options] дополнительные параметры отображения
- */
-async function loadDataset(kind, file, options = {}) {
-  const displayName = sanitizeDisplayFileName(options.displayName ?? file?.name);
+// Загружаю очередной Excel-файл, раскладываю данные по нужному состоянию и инициирую обновления интерфейса.
+async function loadDataset(kind, file) {
   try {
-    assertValidFile(file, displayName);
     // Сообщаю пользователю, что файл читается.
-    showPreviewMessage(`Загрузка файла «${displayName}»...`);
-    // Даю браузеру кадр на отрисовку, чтобы индикатор загрузки отобразился мгновенно.
-    await yieldToEventLoop();
+    showPreviewMessage(`Загрузка файла «${file.name}»...`);
     // В зависимости от типа файла берём подходящий набор ключевых слов для поиска заголовков.
     const headerCandidates = kind === 'violations'
       ? violationFieldDefinitions.flatMap((item) => item.candidates)
@@ -860,13 +714,6 @@ async function loadDataset(kind, file, options = {}) {
   }
 }
 
-/**
- * Управляет отображением прелоадера при чтении Excel-файла.
- * Одновременно выставляет aria-атрибуты, чтобы пользователи со скринридерами получали корректный статус.
- * @param {('violations'|'objects')} kind тип загружаемого файла
- * @param {boolean} isLoading статус чтения файла
- * @param {string} [fileName] имя файла для отображения в индикаторе
- */
 function setLoadingIndicator(kind, isLoading, fileName) {
   const loaderMap = {
     violations: elements.violationsLoader,
@@ -876,26 +723,18 @@ function setLoadingIndicator(kind, isLoading, fileName) {
   if (!loader) {
     return;
   }
-  const safeLabel = fileName ? sanitizeDisplayFileName(fileName) : '';
   if (isLoading) {
     const textNode = loader.querySelector('.file-loader__text');
     if (textNode) {
-      textNode.textContent = safeLabel ? `Обрабатываем «${safeLabel}»` : 'Обрабатываем файл';
+      textNode.textContent = fileName ? `Обрабатываем «${fileName}»` : 'Обрабатываем файл';
     }
     loader.hidden = false;
   } else {
     loader.hidden = true;
   }
-  loader.setAttribute('aria-hidden', String(!isLoading));
-  loader.setAttribute('aria-busy', String(isLoading));
 }
 
-/**
- * Считывает первый лист Excel-файла и возвращает набор записей вместе с заголовками.
- * @param {File} file Excel-файл, уже прошедший базовую валидацию
- * @param {string[]} headerKeywords список подсказок для поиска строки заголовков
- * @returns {Promise<{records: Record<string, unknown>[], headers: string[]}>}
- */
+// Читаю Excel и вытаскиваю из него данные с учётом того, где примерно могут лежать заголовки.
 async function readExcelFile(file, headerKeywords) {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -913,23 +752,11 @@ async function readExcelFile(file, headerKeywords) {
     throw new Error('Не удалось определить строку заголовков.');
   }
   const headers = extractHeaderRow(sheet, headerRowIndex, range);
-  if (headers.length > MAX_COLUMNS_PER_SHEET) {
-    throw new Error(
-      `Файл содержит ${numberFormatter.format(headers.length)} столбцов. Допустимо не более ${numberFormatter.format(MAX_COLUMNS_PER_SHEET)}.`,
-    );
-  }
-  await yieldToEventLoop();
-  const records = extractRecords(sheet, headerRowIndex, headers, { maxRows: MAX_ROWS_PER_SHEET });
+  const records = extractRecords(sheet, headerRowIndex, headers);
   return { records, headers };
 }
 
-/**
- * Находит индекс строки, которая с наибольшей вероятностью содержит заголовки таблицы.
- * @param {XLSX.WorkSheet} sheet лист Excel
- * @param {{ s: { r: number, c: number }, e: { r: number, c: number } }} range рабочий диапазон листа
- * @param {string[]} headerKeywords подсказки для поиска заголовка
- * @returns {number|null} индекс строки с заголовками либо null, если ничего не нашли
- */
+// Подбираю ту строку, которая больше всего похожа на заголовок (ищу текст и совпадения по ключевым словам).
 function detectHeaderRowIndex(sheet, range, headerKeywords) {
   const normalizedKeywords = headerKeywords.map((item) => normalizeHeaderValue(item));
   let bestRowIndex = null;
@@ -972,11 +799,7 @@ function detectHeaderRowIndex(sheet, range, headerKeywords) {
   return bestRowIndex;
 }
 
-/**
- * Приводит значение заголовка к нижнему регистру без лишних пробелов.
- * @param {unknown} value произвольное значение из ячейки
- * @returns {string} нормализованная строка
- */
+// Привожу заголовки к единому виду: убираю лишние пробелы, перевожу в нижний регистр.
 function normalizeHeaderValue(value) {
   if (typeof value === 'string') {
     return value.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -987,13 +810,7 @@ function normalizeHeaderValue(value) {
   return String(value).trim().toLowerCase();
 }
 
-/**
- * Собирает строку заголовков и делает названия столбцов уникальными.
- * @param {XLSX.WorkSheet} sheet лист Excel
- * @param {number} rowIndex индекс строки с заголовками
- * @param {{ s: { r: number, c: number }, e: { r: number, c: number } }} range рабочий диапазон листа
- * @returns {string[]} массив уникальных заголовков
- */
+// Собираю значения из найденной строки заголовков.
 function extractHeaderRow(sheet, rowIndex, range) {
   const headers = [];
   for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
@@ -1001,20 +818,11 @@ function extractHeaderRow(sheet, rowIndex, range) {
     const cell = sheet[address];
     headers.push(typeof cell?.v === 'string' ? cell.v.trim() : cell?.v ?? `Колонка ${colIndex + 1}`);
   }
-  return makeHeadersUnique(headers);
+  return headers;
 }
 
-/**
- * Формирует массив объектов данных на основе заголовков, пропуская полностью пустые строки.
- * Дополнительно ограничивает число обрабатываемых строк для защиты производительности.
- * @param {XLSX.WorkSheet} sheet лист Excel
- * @param {number} headerRowIndex индекс строки заголовков
- * @param {string[]} headers список заголовков
- * @param {{ maxRows?: number }} [options] ограничения на количество строк
- * @returns {Record<string, unknown>[]} массив строк данных
- */
-function extractRecords(sheet, headerRowIndex, headers, options = {}) {
-  const { maxRows = Infinity } = options;
+// Формирую массив объектов-строк на основе заголовков, пропуская полностью пустые строки.
+function extractRecords(sheet, headerRowIndex, headers) {
   const range = XLSX.utils.decode_range(sheet['!ref']);
   const records = [];
   for (let rowIndex = headerRowIndex + 1; rowIndex <= range.e.r; rowIndex += 1) {
@@ -1035,21 +843,12 @@ function extractRecords(sheet, headerRowIndex, headers, options = {}) {
     }
     if (hasValue) {
       records.push(record);
-      if (records.length > maxRows) {
-        throw new Error(
-          `Файл содержит более ${numberFormatter.format(maxRows)} строк с данными. Сократите выгрузку или используйте несколько файлов.`,
-        );
-      }
     }
   }
   return records;
 }
 
-/**
- * Аккуратно извлекает значение из ячейки Excel без потери типа данных.
- * @param {XLSX.CellObject | undefined} cell ячейка листа
- * @returns {unknown} значение из ячейки
- */
+// Аккуратно вытаскиваю значение из ячейки, не теряя числовые и булевы типы.
 function extractCellValue(cell) {
   if (!cell) {
     return '';
@@ -1531,10 +1330,7 @@ function cancelScheduledPreviewUpdate() {
   scheduledPreviewKind = null;
 }
 
-/**
- * Планирует пересчёт отчёта. Несколько событий объединяются в одно обновление, что снижает нагрузку.
- * @param {{ immediate?: boolean }} [options] флаг немедленного пересчёта без ожидания кадра
- */
+// Очередь пересчёта: объединяю пачку событий в один пересчёт за кадр.
 function schedulePreviewUpdate(options = {}) {
   const { immediate = false } = options;
   if (immediate) {
@@ -1560,10 +1356,7 @@ function schedulePreviewUpdate(options = {}) {
   scheduledPreviewKind = 'timeout';
 }
 
-/**
- * Основная точка входа для пересчёта отчёта.
- * Проверяет корректность настроек, пересобирает таблицу и управляет состоянием экспорта.
- */
+// Здесь собрана вся бизнес-логика подготовки отчёта и таблицы.
 function runPreviewUpdate() {
   resetExportState();
   if (!(state.violations.length && state.objects.length)) {
@@ -1735,11 +1528,7 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 // Пример использования: buildDistrictLookup([{ district: 'Центральный административный округ' }], 'district', [], 'district');
 
-/**
- * Агрегирует показатели по округам и формирует итоговую строку отчёта.
- * @param {{ current: { start: Date, end: Date }, previous: { start: Date, end: Date } }} periods выбранные периоды
- * @returns {{ rows: Array<Record<string, any>>, totalRow: Record<string, any> }} строки детального отчёта и суммарная строка
- */
+// Главная функция агрегации: собирает метрики по округам и суммарную строку.
 function buildReport(periods) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
@@ -1970,11 +1759,7 @@ function buildReport(periods) {
   return { rows, totalRow };
 }
 
-/**
- * Строит HTML-таблицу отчёта на основе агрегированных данных.
- * @param {{ rows: Array<Record<string, any>>, totalRow: Record<string, any> }} report агрегированные строки
- * @param {{ current: { start: Date, end: Date }, previous: { start: Date, end: Date } }} periods выбранные периоды
- */
+// Рисую итоговую таблицу в DOM, придерживаясь структуры thead/tbody/tfoot.
 function renderReportTable(report, periods) {
   const headers = buildTableHeaders(periods);
   const table = elements.reportTable;
@@ -2328,11 +2113,7 @@ function formatPercent(value) {
   return value.toFixed(1);
 }
 
-/**
- * Формирует Excel-файл с отчётом, добавляя форматирование и стили, близкие к утверждённому шаблону.
- * @param {{ rows: Array<Record<string, any>>, totalRow: Record<string, any> }} report агрегированные данные
- * @param {{ current: { start: Date, end: Date }, previous: { start: Date, end: Date } }} periods выбранные периоды
- */
+// Генерация Excel-файла: учитываю стили, объединение ячеек и форматирование чисел.
 function exportReportToExcel(report, periods) {
   try {
     const headers = buildTableHeaders(periods);
