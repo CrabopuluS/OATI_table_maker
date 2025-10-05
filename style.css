@@ -38,13 +38,13 @@
   --badge-border: rgba(143, 27, 73, 0.18);
   --badge-text: var(--text-primary);
   --badge-shadow: 0 18px 36px -32px rgba(34, 18, 36, 0.32);
-  --page-gradient-accent: rgba(143, 27, 73, 0.02);
-  --page-gradient-fade: rgba(255, 255, 255, 0.75);
-  --background-grid-color: rgba(143, 27, 73, 0.03);
-  --background-grid-highlight: rgba(143, 27, 73, 0.05);
-  --background-orb-primary: rgba(143, 27, 73, 0.14);
-  --background-orb-accent: rgba(68, 53, 115, 0.08);
-  --background-vignette: rgba(12, 12, 20, 0.05);
+  --page-gradient-accent: rgba(120, 138, 219, 0.08);
+  --page-gradient-fade: rgba(255, 255, 255, 0.8);
+  --background-grid-color: rgba(62, 82, 123, 0.04);
+  --background-grid-highlight: rgba(120, 138, 219, 0.08);
+  --background-orb-primary: rgba(108, 152, 255, 0.16);
+  --background-orb-accent: rgba(92, 186, 219, 0.12);
+  --background-vignette: rgba(12, 18, 32, 0.04);
   --period-current-start: rgba(143, 27, 73, 0.06);
   --period-current-end: rgba(143, 27, 73, 0.015);
   --period-previous-start: rgba(32, 32, 39, 0.04);
@@ -169,7 +169,7 @@ code {
   z-index: -1;
   background: radial-gradient(circle at 15% 20%, var(--background-orb-primary), transparent 45%),
     radial-gradient(circle at 75% 18%, var(--background-orb-accent), transparent 55%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(241, 244, 255, 0.72) 0%, transparent 60%),
     var(--surface-base);
 }
 
