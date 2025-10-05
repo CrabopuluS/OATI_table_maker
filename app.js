@@ -109,6 +109,350 @@ const elements = {
   creditBadgeClose: document.querySelector('.credit-badge__close'),
 };
 
+const MONTH_NAMES_RU = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+];
+
+const WEEKDAY_LABELS_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+class AvailabilityDatePicker {
+  constructor(container, options = {}) {
+    this.container = container;
+    this.input = container.querySelector('input[type="hidden"]');
+    this.button = container.querySelector('.date-picker__button');
+    this.valueNode = container.querySelector('.date-picker__value');
+    this.dropdown = container.querySelector('.date-picker__dropdown');
+    this.placeholder = options.placeholder ?? this.valueNode?.dataset.placeholder ?? '';
+    this.onChange = typeof options.onChange === 'function' ? options.onChange : null;
+    this.availableDates = [];
+    this.availableSet = new Set();
+    this.availableMonths = [];
+    this.monthIndex = 0;
+    this.isOpen = false;
+    this.boundHandlePointerDown = this.handlePointerDown.bind(this);
+    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+
+    if (this.dropdown) {
+      this.dropdown.tabIndex = -1;
+    }
+
+    if (this.button) {
+      this.button.addEventListener('click', () => {
+        if (this.isOpen) {
+          this.close();
+        } else {
+          this.open();
+        }
+      });
+    }
+
+    this.updateDisplay();
+  }
+
+  getValue() {
+    return this.input?.value ?? '';
+  }
+
+  setAvailableDates(dates) {
+    const normalizedDates = [];
+    const seenMonths = new Map();
+    if (Array.isArray(dates)) {
+      for (const item of dates) {
+        if (!item || typeof item.iso !== 'string') {
+          continue;
+        }
+        const iso = item.iso;
+        let baseDate = item.date instanceof Date ? new Date(item.date.getTime()) : null;
+        if (!(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) {
+          const parsed = parseIsoDate(iso);
+          if (Number.isNaN(parsed.getTime())) {
+            continue;
+          }
+          baseDate = parsed;
+        }
+        normalizedDates.push({ iso, date: baseDate });
+        const monthKey = `${baseDate.getFullYear()}-${baseDate.getMonth()}`;
+        if (!seenMonths.has(monthKey)) {
+          seenMonths.set(monthKey, { year: baseDate.getFullYear(), month: baseDate.getMonth() });
+        }
+      }
+    }
+    normalizedDates.sort((a, b) => a.iso.localeCompare(b.iso));
+    this.availableDates = normalizedDates;
+    this.availableSet = new Set(normalizedDates.map((item) => item.iso));
+    this.availableMonths = Array.from(seenMonths.values()).sort((a, b) => {
+      if (a.year !== b.year) {
+        return a.year - b.year;
+      }
+      return a.month - b.month;
+    });
+    if (this.availableMonths.length === 0) {
+      this.monthIndex = 0;
+    } else if (this.monthIndex >= this.availableMonths.length) {
+      this.monthIndex = this.availableMonths.length - 1;
+    }
+    this.alignMonthWithValue();
+    this.renderCalendar();
+    this.updateDisplay();
+  }
+
+  setValue(value, { emitEvent = false } = {}) {
+    const normalized = typeof value === 'string' ? value : '';
+    const nextValue = normalized && this.availableSet.size && !this.availableSet.has(normalized) ? '' : normalized;
+    const previousValue = this.getValue();
+    if (this.input && previousValue !== nextValue) {
+      this.input.value = nextValue;
+    }
+    this.alignMonthWithValue();
+    this.renderCalendar();
+    this.updateDisplay();
+    if (emitEvent && this.onChange && previousValue !== nextValue) {
+      this.onChange(nextValue);
+    }
+  }
+
+  updateDisplay() {
+    if (!this.valueNode) {
+      return;
+    }
+    const value = this.getValue();
+    if (value) {
+      const parsed = parseIsoDate(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        this.valueNode.textContent = formatDateDisplay(parsed);
+      } else {
+        this.valueNode.textContent = value;
+      }
+      this.valueNode.classList.remove('is-placeholder');
+    } else {
+      this.valueNode.textContent = this.placeholder;
+      this.valueNode.classList.add('is-placeholder');
+    }
+    if (this.button) {
+      this.button.setAttribute('aria-expanded', this.isOpen ? 'true' : 'false');
+    }
+  }
+
+  open() {
+    if (!this.dropdown || this.isOpen) {
+      return;
+    }
+    this.isOpen = true;
+    this.renderCalendar();
+    this.dropdown.hidden = false;
+    this.container.classList.add('is-open');
+    this.updateDisplay();
+    document.addEventListener('pointerdown', this.boundHandlePointerDown, true);
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+    const focusCallback = () => {
+      this.focusInitialDay();
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(focusCallback);
+    } else {
+      setTimeout(focusCallback, 0);
+    }
+  }
+
+  close() {
+    if (!this.dropdown || !this.isOpen) {
+      return;
+    }
+    this.isOpen = false;
+    this.dropdown.hidden = true;
+    this.container.classList.remove('is-open');
+    this.updateDisplay();
+    document.removeEventListener('pointerdown', this.boundHandlePointerDown, true);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+  }
+
+  handlePointerDown(event) {
+    if (!this.container.contains(event.target)) {
+      this.close();
+    }
+  }
+
+  handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      this.close();
+      this.button?.focus();
+    }
+  }
+
+  alignMonthWithValue() {
+    const value = this.getValue();
+    if (!value) {
+      return;
+    }
+    const parsed = parseIsoDate(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return;
+    }
+    const key = `${parsed.getFullYear()}-${parsed.getMonth()}`;
+    const index = this.availableMonths.findIndex((item) => `${item.year}-${item.month}` === key);
+    if (index >= 0) {
+      this.monthIndex = index;
+    }
+  }
+
+  renderCalendar() {
+    if (!this.dropdown) {
+      return;
+    }
+    this.dropdown.innerHTML = '';
+    if (!this.availableDates.length) {
+      const empty = document.createElement('p');
+      empty.className = 'date-picker__empty';
+      empty.textContent = 'Нет доступных дат';
+      this.dropdown.append(empty);
+      return;
+    }
+    const monthInfo = this.availableMonths[this.monthIndex] ?? this.availableMonths[0];
+    if (!monthInfo) {
+      const fallback = document.createElement('p');
+      fallback.className = 'date-picker__empty';
+      fallback.textContent = 'Нет доступных дат';
+      this.dropdown.append(fallback);
+      return;
+    }
+    const calendar = document.createElement('div');
+    calendar.className = 'date-picker__calendar';
+
+    const header = document.createElement('div');
+    header.className = 'date-picker__header';
+    const prevButton = document.createElement('button');
+    prevButton.type = 'button';
+    prevButton.className = 'date-picker__nav-button';
+    prevButton.textContent = '‹';
+    prevButton.setAttribute('aria-label', 'Предыдущий месяц');
+    prevButton.disabled = this.monthIndex <= 0;
+    prevButton.addEventListener('click', () => {
+      if (this.monthIndex > 0) {
+        this.monthIndex -= 1;
+        this.renderCalendar();
+      }
+    });
+
+    const nextButton = document.createElement('button');
+    nextButton.type = 'button';
+    nextButton.className = 'date-picker__nav-button';
+    nextButton.textContent = '›';
+    nextButton.setAttribute('aria-label', 'Следующий месяц');
+    nextButton.disabled = this.monthIndex >= this.availableMonths.length - 1;
+    nextButton.addEventListener('click', () => {
+      if (this.monthIndex < this.availableMonths.length - 1) {
+        this.monthIndex += 1;
+        this.renderCalendar();
+      }
+    });
+
+    const monthLabel = document.createElement('span');
+    monthLabel.className = 'date-picker__month-label';
+    monthLabel.textContent = `${MONTH_NAMES_RU[monthInfo.month] ?? ''} ${monthInfo.year}`.trim();
+
+    header.append(prevButton, monthLabel, nextButton);
+    calendar.append(header);
+
+    const weekdaysRow = document.createElement('div');
+    weekdaysRow.className = 'date-picker__weekdays';
+    for (const label of WEEKDAY_LABELS_RU) {
+      const weekday = document.createElement('span');
+      weekday.className = 'date-picker__weekday';
+      weekday.textContent = label;
+      weekdaysRow.append(weekday);
+    }
+    calendar.append(weekdaysRow);
+
+    const grid = document.createElement('div');
+    grid.className = 'date-picker__grid';
+    const firstDay = new Date(monthInfo.year, monthInfo.month, 1);
+    const offset = (firstDay.getDay() + 6) % 7;
+    for (let i = 0; i < offset; i += 1) {
+      const filler = document.createElement('span');
+      filler.className = 'date-picker__day is-disabled';
+      filler.setAttribute('aria-hidden', 'true');
+      grid.append(filler);
+    }
+    const daysInMonth = new Date(monthInfo.year, monthInfo.month + 1, 0).getDate();
+    const currentValue = this.getValue();
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateObject = new Date(monthInfo.year, monthInfo.month, day);
+      const iso = formatIsoDate(dateObject);
+      if (this.availableSet.has(iso)) {
+        const dayButton = document.createElement('button');
+        dayButton.type = 'button';
+        dayButton.className = 'date-picker__day is-available';
+        dayButton.textContent = String(day);
+        dayButton.dataset.value = iso;
+        dayButton.setAttribute('aria-label', formatDateDisplay(dateObject));
+        if (iso === currentValue) {
+          dayButton.classList.add('is-selected');
+        }
+        dayButton.addEventListener('click', () => {
+          this.setValue(iso, { emitEvent: true });
+          this.close();
+          this.button?.focus();
+        });
+        grid.append(dayButton);
+      } else {
+        const dayCell = document.createElement('span');
+        dayCell.className = 'date-picker__day is-disabled';
+        dayCell.textContent = String(day);
+        grid.append(dayCell);
+      }
+    }
+
+    calendar.append(grid);
+    this.dropdown.append(calendar);
+  }
+
+  focusInitialDay() {
+    if (!this.dropdown) {
+      return;
+    }
+    const target = this.dropdown.querySelector('.date-picker__day.is-selected')
+      || this.dropdown.querySelector('.date-picker__day.is-available');
+    if (target instanceof HTMLElement) {
+      target.focus();
+    } else {
+      this.dropdown.focus();
+    }
+  }
+}
+
+const datePickers = {};
+
+const datePickerConfigs = [
+  { key: 'currentStart', selector: '[data-picker="current-start"]' },
+  { key: 'currentEnd', selector: '[data-picker="current-end"]' },
+  { key: 'previousStart', selector: '[data-picker="previous-start"]' },
+  { key: 'previousEnd', selector: '[data-picker="previous-end"]' },
+];
+
+for (const config of datePickerConfigs) {
+  const container = document.querySelector(config.selector);
+  if (!container) {
+    continue;
+  }
+  datePickers[config.key] = new AvailabilityDatePicker(container, {
+    placeholder: '— Выберите дату —',
+    onChange: () => {
+      schedulePreviewUpdate();
+    },
+  });
+}
+
 const THEME_STORAGE_KEY = 'oati-theme-preference';
 const themeMediaQuery = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -291,16 +635,6 @@ for (const radio of violationModeRadios) {
       state.customViolations = [];
     }
     renderViolationOptions();
-    schedulePreviewUpdate();
-  });
-}
-
-for (const select of [elements.currentStart, elements.currentEnd, elements.previousStart, elements.previousEnd]) {
-  if (!select) {
-    continue;
-  }
-  // Любое изменение дат должно немедленно перерасчитать отчет, но делаем это через очередь.
-  select.addEventListener('change', () => {
     schedulePreviewUpdate();
   });
 }
@@ -592,17 +926,17 @@ function updateAvailableFilters() {
   const dateColumn = state.violationMapping.inspectionDate;
   if (dateColumn) {
     state.availableDates = extractUniqueDates(state.violations, dateColumn);
-    updateDateSelect(elements.currentStart, state.availableDates, 0);
-    updateDateSelect(elements.currentEnd, state.availableDates, state.availableDates.length - 1);
+    updateDatePicker(datePickers.currentStart, state.availableDates, 0);
+    updateDatePicker(datePickers.currentEnd, state.availableDates, state.availableDates.length - 1);
     const previousEndIndex = state.availableDates.length > 1 ? state.availableDates.length - 2 : state.availableDates.length - 1;
-    updateDateSelect(elements.previousStart, state.availableDates, 0);
-    updateDateSelect(elements.previousEnd, state.availableDates, previousEndIndex);
+    updateDatePicker(datePickers.previousStart, state.availableDates, 0);
+    updateDatePicker(datePickers.previousEnd, state.availableDates, previousEndIndex);
   } else {
     state.availableDates = [];
-    updateDateSelect(elements.currentStart, state.availableDates, null);
-    updateDateSelect(elements.currentEnd, state.availableDates, null);
-    updateDateSelect(elements.previousStart, state.availableDates, null);
-    updateDateSelect(elements.previousEnd, state.availableDates, null);
+    updateDatePicker(datePickers.currentStart, state.availableDates, null);
+    updateDatePicker(datePickers.currentEnd, state.availableDates, null);
+    updateDatePicker(datePickers.previousStart, state.availableDates, null);
+    updateDatePicker(datePickers.previousEnd, state.availableDates, null);
   }
   const objectTypeColumn = state.objectMapping.objectType;
   const objectTypes = collectUniqueValues(state.objects, objectTypeColumn).sort((a, b) => a.localeCompare(b, 'ru'));
@@ -623,26 +957,13 @@ function updateAvailableFilters() {
   updateDataSourceControl();
 }
 
-function updateDateSelect(select, dates, defaultIndex) {
-  if (!select) {
+function updateDatePicker(picker, dates, defaultIndex) {
+  if (!picker) {
     return;
   }
-  const previousValue = select.value;
-  const fragment = document.createDocumentFragment();
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = '— Выберите дату —';
-  fragment.append(placeholder);
-  const availableValues = new Set();
-  for (const item of dates) {
-    const option = document.createElement('option');
-    option.value = item.iso;
-    option.textContent = formatDateDisplay(item.date);
-    availableValues.add(item.iso);
-    fragment.append(option);
-  }
-  select.innerHTML = '';
-  select.append(fragment);
+  const availableValues = new Set(dates.map((item) => item.iso));
+  const previousValue = picker.getValue();
+  picker.setAvailableDates(dates);
   let nextValue = '';
   if (previousValue && availableValues.has(previousValue)) {
     nextValue = previousValue;
@@ -650,7 +971,7 @@ function updateDateSelect(select, dates, defaultIndex) {
     const index = Math.min(Math.max(defaultIndex, 0), dates.length - 1);
     nextValue = dates[index]?.iso ?? '';
   }
-  select.value = nextValue;
+  picker.setValue(nextValue);
 }
 
 function renderSearchableMultiselect(options) {
