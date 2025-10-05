@@ -3,12 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="referrer" content="no-referrer" />
-  <meta
-    http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
-  />
   <title>Конструктор отчетных таблиц ОАТИ</title>
   <link rel="icon" type="image/svg+xml" href="дизайн/ЛОГО.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -22,20 +16,11 @@
   <script src="app.js" type="module" defer></script>
 </head>
 <body class="theme-light">
-  <a class="skip-link" href="#app-main">Перейти к основному содержимому</a>
   <!-- Шапка приложения: приветственный блок с кратким описанием. -->
   <header class="app-header">
     <div class="header-top">
       <div class="header-brand">
-        <img
-          src="дизайн/ЛОГО.svg"
-          alt="Логотип Контроль Москвы"
-          class="brand-logo"
-          loading="lazy"
-          decoding="async"
-          width="96"
-          height="96"
-        />
+        <img src="дизайн/ЛОГО.svg" alt="Логотип Контроль Москвы" class="brand-logo" />
         <div class="brand-text">
           <span class="brand-tag">Контроль Москвы</span>
           <h1>Конструктор отчетных таблиц ОАТИ</h1>
@@ -69,7 +54,7 @@
     </button>
   </aside>
 
-  <main class="app-main" id="app-main">
+  <main class="app-main">
     <!-- Блок загрузки исходных таблиц. -->
     <section class="card">
       <h2>1. Загрузка исходных данных</h2>
@@ -77,7 +62,7 @@
         <!-- Здесь загружаем таблицу с нарушениями. -->
         <label for="violations-file" class="file-label">Таблица по нарушениям (Excel)</label>
         <div class="file-input-control">
-          <input type="file" id="violations-file" accept=".xlsx,.xls,.xlsm" />
+          <input type="file" id="violations-file" accept=".xlsx,.xls" />
           <div class="file-loader" id="violations-loader" role="status" aria-live="polite" hidden>
             <span class="spinner" aria-hidden="true"></span>
             <span class="file-loader__text">Обработка…</span>
@@ -88,7 +73,7 @@
         <!-- А этот инпут для перечня объектов контроля. -->
         <label for="objects-file" class="file-label">Таблица по объектам (Excel)</label>
         <div class="file-input-control">
-          <input type="file" id="objects-file" accept=".xlsx,.xls,.xlsm" />
+          <input type="file" id="objects-file" accept=".xlsx,.xls" />
           <div class="file-loader" id="objects-loader" role="status" aria-live="polite" hidden>
             <span class="spinner" aria-hidden="true"></span>
             <span class="file-loader__text">Обработка…</span>
