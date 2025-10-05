@@ -1706,7 +1706,7 @@ function buildReport(periods) {
   }
 
   const totalRow = {
-    label: 'Итого',
+    label: 'ИТОГО',
     totalObjects: totals.totalObjects,
     inspectedObjects: totals.inspectedObjects,
     inspectedPercent: computePercent(totals.inspectedObjects, totals.totalObjects),
@@ -1774,16 +1774,16 @@ function createCell(value, isHeader = false) {
 // Формирую заголовки таблицы, включая динамический текст по выбранному периоду.
 function buildTableHeaders(periods) {
   const totalHeader = buildTotalHeader();
-  const rangeHeader = `Проверено объектов с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
+  const rangeHeader = `Проверено ОДХ с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
   return [
     'Округ',
     totalHeader,
     rangeHeader,
-    '% проверенных объектов от общего количества',
-    '% объектов с выявленными нарушениями',
-    'Всего выявленных нарушений',
+    '% проверенных объектов от общего количества ОДХ',
+    '% объектов с нарушениями',
+    'Всего нарушений',
     'Нарушения, выявленные за отчётный период',
-    'Нарушения, находящиеся на контроле, с предыдущего периода',
+    'Нарушения, находящиеся на контроле с предыдущей проверки',
     'Устранено нарушений',
     'Нарушения на контроле',
   ];
@@ -1792,12 +1792,48 @@ function buildTableHeaders(periods) {
 // Подбираю надпись для столбца «Всего», учитывая выбранные типы объектов.
 function buildTotalHeader() {
   if (state.typeMode === 'all' || !state.customTypes.length) {
-    return 'Всего объектов';
+    return 'Всего ОДХ';
   }
   if (state.customTypes.length === 1) {
     return `Всего ${state.customTypes[0]}`;
   }
   return `Всего (${state.customTypes.join(', ')})`;
+}
+
+function buildExcelHeaderNumbers(columnCount) {
+  const template = [1, 2, 3, 4, '4.1', '4.2', 5, 6, '6.1', '6.2'];
+  if (columnCount <= template.length) {
+    return template.slice(0, columnCount);
+  }
+  const extended = template.slice();
+  for (let index = template.length; index < columnCount; index += 1) {
+    extended.push(String(index + 1));
+  }
+  return extended;
+}
+
+function buildExcelTitle(periods) {
+  const periodRange = formatTitlePeriod(periods?.current);
+  const parts = ['Нарушения на ОДХ'];
+  if (periodRange) {
+    parts[0] += ` (отчёт за ${periodRange})`;
+  }
+  const dataSource = describeDataSourceForTitle();
+  if (dataSource) {
+    parts.push(dataSource);
+  }
+  return parts.join(', ');
+}
+
+function describeDataSourceForTitle() {
+  switch (state.dataSourceOption) {
+    case 'oati':
+      return 'накопленные только ОАТИ';
+    case 'cafap':
+      return 'накопленные только ЦАФАП';
+    default:
+      return 'выявленные ОАТИ и ЦАФАП';
+  }
 }
 
 // Очищаю таблицу — пригодится в сценариях с ошибками и сменой фильтров.
@@ -1977,6 +2013,15 @@ function formatDateDisplay(date) {
   return `${day}.${month}.${year}`;
 }
 
+function formatDateDisplayShort(date) {
+  if (!(date instanceof Date)) {
+    return '';
+  }
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}.${month}`;
+}
+
 // Собираю уникальные строки из указанной колонки, сохраняя оригинальное написание.
 function collectUniqueValues(records, column) {
   if (!column) {
@@ -2035,115 +2080,87 @@ function exportReportToExcel(report, periods) {
   try {
     const headers = buildTableHeaders(periods);
     const columnCount = headers.length;
+    const headerNumbers = buildExcelHeaderNumbers(columnCount);
+    const title = buildExcelTitle(periods);
+
+    const createEmptyRow = () => Array.from({ length: columnCount }, () => null);
     const aoa = [];
 
-    const title = 'Итоговая таблица по объектам контроля ОАТИ';
-    const typeDescription = state.typeMode === 'custom' && state.customTypes.length
-      ? `Выбранные типы объектов: ${state.customTypes.join(', ')}`
-      : 'Все типы объектов контроля';
-    const violationDescription = state.violationMode === 'custom' && state.customViolations.length
-      ? `Выбранные нарушения: ${state.customViolations.join(', ')}`
-      : 'Все наименования нарушений';
-    const dataSourceDescription = describeSelectedDataSource();
-
-    // Шапка будущего листа: заголовок, описания периодов и выбранных типов.
-    aoa.push([title]);
-    aoa.push(['Отчётный период', formatPeriodRange(periods.current)]);
-    aoa.push(['Предыдущий период', formatPeriodRange(periods.previous)]);
-    aoa.push([typeDescription]);
-    aoa.push([violationDescription]);
-    aoa.push([dataSourceDescription]);
-    aoa.push([]);
-
+    aoa.push(createEmptyRow());
+    const titleRowIndex = aoa.length;
+    aoa.push([title, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
+    aoa.push(createEmptyRow());
     const headerRowIndex = aoa.length;
     aoa.push(headers);
+    const numberRowIndex = aoa.length;
+    aoa.push(headerNumbers);
+
     const dataStartRow = aoa.length;
+    aoa.push(buildExportDataRow(report.totalRow));
+    const detailStartRow = aoa.length;
     for (const row of report.rows) {
       aoa.push(buildExportDataRow(row));
     }
-    aoa.push(buildExportDataRow(report.totalRow));
-    const totalRowIndex = aoa.length - 1;
+    const lastDataRowIndex = aoa.length - 1;
 
     const sheet = XLSX.utils.aoa_to_sheet(aoa);
     sheet['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: columnCount - 1 } },
-      { s: { r: 1, c: 1 }, e: { r: 1, c: columnCount - 1 } },
-      { s: { r: 2, c: 1 }, e: { r: 2, c: columnCount - 1 } },
-      { s: { r: 3, c: 0 }, e: { r: 3, c: columnCount - 1 } },
-      { s: { r: 4, c: 0 }, e: { r: 4, c: columnCount - 1 } },
+      { s: { r: titleRowIndex, c: 0 }, e: { r: titleRowIndex, c: columnCount - 1 } },
     ];
-    sheet['!cols'] = headers.map((_, index) => ({
-      wch: index === 0 ? 28 : 18,
+
+    const baseColumnWidths = [26, 16, 22, 28, 22, 20, 34, 34, 24, 24];
+    sheet['!cols'] = Array.from({ length: columnCount }, (_, index) => ({
+      wch: baseColumnWidths[index] ?? 20,
     }));
 
-    const borderColor = 'FFCBD5F5';
-    const headerStyle = {
-      font: { bold: true, color: { rgb: 'FFFFFFFF' } },
-      fill: { fgColor: { rgb: 'FF1D4ED8' } },
+    sheet['!rows'] = sheet['!rows'] ?? [];
+    sheet['!rows'][titleRowIndex] = { hpt: 26 };
+    sheet['!rows'][headerRowIndex] = { hpt: 48 };
+    sheet['!rows'][numberRowIndex] = { hpt: 22 };
+    sheet['!rows'][dataStartRow] = { hpt: 24 };
+
+    const baseFont = { name: 'Times New Roman', color: { rgb: 'FF1F2937' } };
+    const borderColor = 'FF94A3B8';
+    const titleStyle = {
+      font: { ...baseFont, bold: true, sz: 14 },
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      fill: { fgColor: { rgb: 'FFE2E8F0' } },
       border: buildBorderStyle(borderColor),
     };
-    const titleStyle = {
-      font: { bold: true, sz: 16, color: { rgb: 'FFFFFFFF' } },
+    const headerStyle = {
+      font: { ...baseFont, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      fill: { fgColor: { rgb: 'FFCBD5F5' } },
+      border: buildBorderStyle(borderColor),
+    };
+    const numberingStyle = {
+      font: { ...baseFont, bold: true },
       alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: 'FF0F172A' } },
-    };
-    const metaLabelStyle = {
-      font: { bold: true, color: { rgb: 'FF1F2937' } },
-      alignment: { horizontal: 'left', vertical: 'center' },
-    };
-    const metaValueStyle = {
-      alignment: { horizontal: 'left', vertical: 'center' },
-      font: { color: { rgb: 'FF1F2937' } },
-    };
-    const scopeStyle = {
-      font: { italic: true, color: { rgb: 'FF1F2937' } },
-      alignment: { horizontal: 'left', vertical: 'center' },
-      fill: { fgColor: { rgb: 'FFF8FAFC' } },
+      fill: { fgColor: { rgb: 'FFE0E7FF' } },
+      border: buildBorderStyle(borderColor),
     };
     const baseDataStyle = {
+      font: { ...baseFont },
       alignment: { horizontal: 'center', vertical: 'center' },
       border: buildBorderStyle(borderColor),
-      font: { color: { rgb: 'FF1F2937' } },
     };
     const zebraDataStyle = {
-      fill: { fgColor: { rgb: 'FFF8FAFD' } },
+      fill: { fgColor: { rgb: 'FFF8FAFC' } },
     };
     const totalRowStyle = {
-      font: { bold: true, color: { rgb: 'FF1F2937' } },
-      fill: { fgColor: { rgb: 'FFE0E7FF' } },
+      font: { ...baseFont, bold: true, sz: 12 },
       alignment: { horizontal: 'center', vertical: 'center' },
+      fill: { fgColor: { rgb: 'FFFDEBD3' } },
       border: buildBorderStyle(borderColor),
     };
     const firstColumnStyle = {
-      alignment: { horizontal: 'left', vertical: 'center' },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
     };
 
-    setCellStyle(sheet, 0, 0, titleStyle);
-    setCellStyle(sheet, 1, 0, metaLabelStyle);
-    setCellStyle(sheet, 1, 1, metaValueStyle);
-    setCellStyle(sheet, 2, 0, metaLabelStyle);
-    setCellStyle(sheet, 2, 1, metaValueStyle);
-    setCellStyle(sheet, 3, 0, scopeStyle);
-    setCellStyle(sheet, 4, 0, scopeStyle);
-
     for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+      setCellStyle(sheet, titleRowIndex, colIndex, titleStyle);
       setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);
-    }
-
-    for (let rowIndex = dataStartRow; rowIndex < totalRowIndex; rowIndex += 1) {
-      const isZebraRow = (rowIndex - dataStartRow) % 2 === 1;
-      // Для читаемости делаю зебру и отдельное форматирование первой колонки.
-      for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
-        const styles = [baseDataStyle];
-        if (isZebraRow) {
-          styles.push(zebraDataStyle);
-        }
-        if (colIndex === 0) {
-          styles.push(firstColumnStyle);
-        }
-        setCellStyle(sheet, rowIndex, colIndex, ...styles);
-      }
+      setCellStyle(sheet, numberRowIndex, colIndex, numberingStyle);
     }
 
     for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
@@ -2151,13 +2168,29 @@ function exportReportToExcel(report, periods) {
       if (colIndex === 0) {
         styles.push(firstColumnStyle);
       }
-      setCellStyle(sheet, totalRowIndex, colIndex, ...styles);
+      setCellStyle(sheet, dataStartRow, colIndex, ...styles);
+    }
+
+    if (detailStartRow <= lastDataRowIndex) {
+      for (let rowIndex = detailStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
+        const isZebraRow = (rowIndex - detailStartRow) % 2 === 1;
+        for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+          const styles = [baseDataStyle];
+          if (isZebraRow) {
+            styles.push(zebraDataStyle);
+          }
+          if (colIndex === 0) {
+            styles.push(firstColumnStyle);
+          }
+          setCellStyle(sheet, rowIndex, colIndex, ...styles);
+        }
+        sheet['!rows'][rowIndex] = { ...(sheet['!rows'][rowIndex] ?? {}), hpt: 20 };
+      }
     }
 
     const integerColumns = [1, 2, 5, 6, 7, 8, 9];
     const percentColumns = [3, 4];
-    for (let rowIndex = dataStartRow; rowIndex <= totalRowIndex; rowIndex += 1) {
-      // После расстановки стилей прописываю числовые форматы, чтобы Excel показал всё красиво.
+    for (let rowIndex = dataStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
       for (const column of integerColumns) {
         setNumberFormat(sheet, rowIndex, column, '#,##0');
       }
@@ -2274,6 +2307,22 @@ function formatPeriodRange(period) {
   }
   const start = formatDateDisplay(period.start);
   const end = formatDateDisplay(period.end);
+  if (!start || !end) {
+    return '';
+  }
+  return `${start} — ${end}`;
+}
+
+function formatTitlePeriod(period) {
+  if (!period) {
+    return '';
+  }
+  const sameYear =
+    period.start instanceof Date &&
+    period.end instanceof Date &&
+    period.start.getFullYear() === period.end.getFullYear();
+  const start = sameYear ? formatDateDisplayShort(period.start) : formatDateDisplay(period.start);
+  const end = sameYear ? formatDateDisplayShort(period.end) : formatDateDisplay(period.end);
   if (!start || !end) {
     return '';
   }
