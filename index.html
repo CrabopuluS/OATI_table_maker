@@ -110,15 +110,39 @@
             <p class="period-card__description">Сформируйте основу отчета, выбрав фактический диапазон.</p>
           </div>
           <div class="period-card__controls">
-            <label class="fancy-select">
+            <label class="fancy-select fancy-date-picker">
               <span class="fancy-select__label">Начало периода</span>
-              <select id="current-start"></select>
-              <span class="fancy-select__chevron" aria-hidden="true"></span>
+              <div class="date-picker" data-picker="current-start">
+                <input type="hidden" id="current-start" />
+                <button
+                  type="button"
+                  class="date-picker__button"
+                  id="current-start-trigger"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                >
+                  <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
+                  <span class="date-picker__icon" aria-hidden="true"></span>
+                </button>
+                <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
+              </div>
             </label>
-            <label class="fancy-select">
+            <label class="fancy-select fancy-date-picker">
               <span class="fancy-select__label">Конец периода</span>
-              <select id="current-end"></select>
-              <span class="fancy-select__chevron" aria-hidden="true"></span>
+              <div class="date-picker" data-picker="current-end">
+                <input type="hidden" id="current-end" />
+                <button
+                  type="button"
+                  class="date-picker__button"
+                  id="current-end-trigger"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                >
+                  <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
+                  <span class="date-picker__icon" aria-hidden="true"></span>
+                </button>
+                <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
+              </div>
             </label>
           </div>
         </fieldset>
@@ -130,15 +154,39 @@
             <p class="period-card__description">Подберите интервал для сопоставления динамики.</p>
           </div>
           <div class="period-card__controls">
-            <label class="fancy-select">
+            <label class="fancy-select fancy-date-picker">
               <span class="fancy-select__label">Начало периода</span>
-              <select id="previous-start"></select>
-              <span class="fancy-select__chevron" aria-hidden="true"></span>
+              <div class="date-picker" data-picker="previous-start">
+                <input type="hidden" id="previous-start" />
+                <button
+                  type="button"
+                  class="date-picker__button"
+                  id="previous-start-trigger"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                >
+                  <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
+                  <span class="date-picker__icon" aria-hidden="true"></span>
+                </button>
+                <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
+              </div>
             </label>
-            <label class="fancy-select">
+            <label class="fancy-select fancy-date-picker">
               <span class="fancy-select__label">Конец периода</span>
-              <select id="previous-end"></select>
-              <span class="fancy-select__chevron" aria-hidden="true"></span>
+              <div class="date-picker" data-picker="previous-end">
+                <input type="hidden" id="previous-end" />
+                <button
+                  type="button"
+                  class="date-picker__button"
+                  id="previous-end-trigger"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                >
+                  <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
+                  <span class="date-picker__icon" aria-hidden="true"></span>
+                </button>
+                <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
+              </div>
             </label>
           </div>
         </fieldset>
