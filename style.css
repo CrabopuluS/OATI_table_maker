@@ -40,6 +40,11 @@
   --badge-shadow: 0 20px 45px -28px rgba(34, 18, 36, 0.42);
   --page-gradient-accent: rgba(143, 27, 73, 0.06);
   --page-gradient-fade: transparent;
+  --background-grid-color: rgba(143, 27, 73, 0.08);
+  --background-grid-highlight: rgba(143, 27, 73, 0.14);
+  --background-orb-primary: rgba(143, 27, 73, 0.28);
+  --background-orb-accent: rgba(68, 53, 115, 0.2);
+  --background-vignette: rgba(12, 12, 20, 0.12);
   --period-current-start: rgba(143, 27, 73, 0.12);
   --period-current-end: rgba(143, 27, 73, 0.04);
   --period-previous-start: rgba(32, 32, 39, 0.08);
@@ -97,6 +102,11 @@ body.theme-dark {
   --badge-shadow: 0 28px 60px -34px rgba(0, 0, 0, 0.85);
   --page-gradient-accent: rgba(143, 27, 73, 0.24);
   --page-gradient-fade: rgba(8, 9, 15, 0.5);
+  --background-grid-color: rgba(121, 128, 154, 0.18);
+  --background-grid-highlight: rgba(255, 111, 158, 0.28);
+  --background-orb-primary: rgba(255, 111, 158, 0.22);
+  --background-orb-accent: rgba(63, 87, 159, 0.24);
+  --background-vignette: rgba(3, 6, 18, 0.46);
   --period-current-start: rgba(143, 27, 73, 0.35);
   --period-current-end: rgba(143, 27, 73, 0.12);
   --period-previous-start: rgba(84, 88, 112, 0.22);
@@ -120,10 +130,10 @@ body.theme-dark {
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at 0% 0%, var(--page-gradient-accent), var(--page-gradient-fade) 55%),
-    var(--surface-base);
+  background: var(--surface-base);
   color: var(--text-primary);
   transition: background 0.4s ease, color 0.4s ease;
+  position: relative;
 }
 
 a {
@@ -135,6 +145,75 @@ img {
   max-width: 100%;
 }
 
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  background: rgba(143, 27, 73, 0.12);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.4rem;
+  font-size: 0.85em;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+.app-background {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: -1;
+  background: radial-gradient(circle at 15% 20%, var(--background-orb-primary), transparent 45%),
+    radial-gradient(circle at 75% 18%, var(--background-orb-accent), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, transparent 45%),
+    var(--surface-base);
+}
+
+body.theme-dark .app-background {
+  background: radial-gradient(circle at 18% 18%, var(--background-orb-primary), transparent 48%),
+    radial-gradient(circle at 78% 12%, var(--background-orb-accent), transparent 55%),
+    linear-gradient(180deg, rgba(15, 17, 24, 0.65) 0%, transparent 55%),
+    var(--surface-base);
+}
+
+.app-background__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(0);
+  opacity: 0.85;
+  transform: translate(-50%, -50%);
+}
+
+.app-background__orb--primary {
+  top: 16%;
+  left: 12%;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, var(--background-orb-primary), transparent 70%);
+}
+
+.app-background__orb--accent {
+  top: 12%;
+  right: -4%;
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, var(--background-orb-accent), transparent 72%);
+}
+
+.app-background__grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(90deg, transparent 96%, var(--background-grid-color) 96%),
+    linear-gradient(0deg, transparent 96%, var(--background-grid-color) 96%),
+    radial-gradient(circle at 50% 50%, transparent 0%, var(--background-vignette) 70%);
+  background-size: 90px 90px, 90px 90px, 100% 100%;
+  opacity: 0.5;
+}
+
 .app-header {
   padding: 3rem 1.5rem 2.2rem;
   max-width: 1200px;
@@ -142,6 +221,56 @@ img {
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
+}
+
+.process-map {
+  margin-top: 1.5rem;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(143, 27, 73, 0.12);
+  border-radius: 24px;
+  padding: 1rem 1.4rem;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 30px 60px -40px rgba(17, 16, 28, 0.48);
+}
+
+.process-map__list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+  padding: 0;
+  margin: 0;
+}
+
+.process-map__item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(143, 27, 73, 0.1), transparent 65%);
+  color: var(--text-secondary);
+  font-weight: 600;
+  border: 1px solid rgba(143, 27, 73, 0.08);
+}
+
+.process-map__number {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--brand-primary);
+  background: rgba(143, 27, 73, 0.14);
+}
+
+.process-map__text {
+  flex: 1;
+  font-size: 0.95rem;
+  color: var(--text-primary);
 }
 
 .header-top {
@@ -303,6 +432,24 @@ img {
   }
 }
 
+@media (max-width: 768px) {
+  .process-map {
+    padding: 0.9rem 1rem;
+  }
+
+  .process-map__item {
+    padding: 0.75rem 0.9rem;
+  }
+
+  .app-header {
+    padding-top: 2.4rem;
+  }
+
+  .app-main {
+    padding-inline: 1rem;
+  }
+}
+
 .theme-toggle {
   position: relative;
   display: inline-flex;
@@ -420,6 +567,44 @@ body.theme-dark .theme-toggle__label {
   color: var(--text-secondary);
 }
 
+body.theme-dark .process-map {
+  background: rgba(26, 30, 44, 0.78);
+  border-color: rgba(143, 27, 73, 0.26);
+  box-shadow: 0 34px 70px -38px rgba(0, 0, 0, 0.8);
+}
+
+body.theme-dark .process-map__item {
+  background: linear-gradient(135deg, rgba(143, 27, 73, 0.25), transparent 65%);
+  border-color: rgba(143, 27, 73, 0.3);
+  color: var(--text-secondary);
+}
+
+body.theme-dark .process-map__text {
+  color: var(--text-primary);
+}
+
+body.theme-dark .card {
+  background: linear-gradient(150deg, rgba(30, 34, 48, 0.88), rgba(30, 34, 48, 0.72));
+  border-color: rgba(118, 126, 150, 0.35);
+  box-shadow: var(--shadow-strong);
+}
+
+body.theme-dark .card--guide,
+body.theme-dark .card--support {
+  background: linear-gradient(165deg, rgba(143, 27, 73, 0.25), rgba(26, 30, 44, 0.85));
+}
+
+body.theme-dark .support-tile {
+  background: linear-gradient(135deg, rgba(143, 27, 73, 0.26), rgba(26, 30, 44, 0.9));
+  border-color: rgba(143, 27, 73, 0.32);
+  box-shadow: 0 34px 60px -36px rgba(0, 0, 0, 0.75);
+}
+
+body.theme-dark code {
+  background: rgba(143, 27, 73, 0.32);
+  color: var(--text-primary);
+}
+
 .app-main {
   display: flex;
   flex-direction: column;
@@ -430,11 +615,16 @@ body.theme-dark .theme-toggle__label {
 }
 
 .card {
-  background: var(--surface-card);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72))
+      var(--surface-card),
+    var(--surface-card);
   border-radius: 18px;
   padding: 1.6rem;
   border: 1px solid var(--border-soft);
   box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
 }
 
 .card h2 {
@@ -453,6 +643,68 @@ body.theme-dark .theme-toggle__label {
   height: 2px;
   background: var(--brand-primary);
   border-radius: 2px;
+}
+
+.card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.card__subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  max-width: 720px;
+}
+
+.card--guide,
+.card--support {
+  background: linear-gradient(160deg, rgba(143, 27, 73, 0.08), transparent 60%), var(--surface-card);
+}
+
+.guide-list {
+  margin: 1.25rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.75rem;
+  color: var(--text-primary);
+}
+
+.guide-list li {
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.support-grid {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem;
+}
+
+.support-tile {
+  padding: 1.2rem 1.3rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(143, 27, 73, 0.12), transparent 70%), var(--surface-card);
+  border: 1px solid rgba(143, 27, 73, 0.12);
+  box-shadow: 0 24px 48px -36px rgba(21, 16, 29, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.support-tile h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.support-tile p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  font-size: 0.95rem;
 }
 
 .file-input-group {
@@ -1167,6 +1419,18 @@ table {
   transition: background 0.4s ease, color 0.4s ease;
 }
 
+table caption {
+  caption-side: top;
+  padding: 1rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-secondary);
+}
+
+body.theme-dark table caption {
+  color: var(--text-secondary);
+}
+
 thead th {
   background: var(--table-header-bg);
   font-weight: 700;
@@ -1198,6 +1462,14 @@ tfoot td {
   text-align: center;
   font-size: 0.95rem;
   transition: background 0.4s ease, color 0.4s ease;
+}
+
+.app-footer__note {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
 }
 
 .app-footer strong {

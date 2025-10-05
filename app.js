@@ -128,6 +128,11 @@ const MONTH_NAMES_RU = [
 
 const WEEKDAY_LABELS_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+/**
+ * Датапикер, работающий только с доступными датами из исходных файлов.
+ * Компонент отвечает за отображение календаря, навигацию по месяцам
+ * и выбор значения с последующим уведомлением слушателей.
+ */
 class AvailabilityDatePicker {
   constructor(container, options = {}) {
     this.container = container;
@@ -166,6 +171,10 @@ class AvailabilityDatePicker {
     return this.input?.value ?? '';
   }
 
+  /**
+   * Обновляет список доступных дат и перестраивает календарь.
+   * @param {Array<{iso: string, date: Date}>} dates — массив дат в формате ISO и объектов Date.
+   */
   setAvailableDates(dates) {
     const normalizedDates = [];
     const seenMonths = new Map();
@@ -209,6 +218,11 @@ class AvailabilityDatePicker {
     this.updateDisplay();
   }
 
+  /**
+   * Устанавливает выбранную дату, валидируя её наличие в списке доступных значений.
+   * @param {string} value — ISO-строка даты (YYYY-MM-DD).
+   * @param {{emitEvent?: boolean}} [options] — настройки уведомлений об изменении значения.
+   */
   setValue(value, { emitEvent = false } = {}) {
     const normalized = typeof value === 'string' ? value : '';
     const nextValue = normalized && this.availableSet.size && !this.availableSet.has(normalized) ? '' : normalized;
@@ -224,6 +238,9 @@ class AvailabilityDatePicker {
     }
   }
 
+  /**
+   * Перерисовывает значение на кнопке выбора даты и обновляет атрибуты доступности.
+   */
   updateDisplay() {
     if (!this.valueNode) {
       return;
@@ -246,6 +263,9 @@ class AvailabilityDatePicker {
     }
   }
 
+  /**
+   * Открывает календарь, создаёт слушатели кликов и клавиш для закрытия.
+   */
   open() {
     if (!this.dropdown || this.isOpen) {
       return;
@@ -267,6 +287,9 @@ class AvailabilityDatePicker {
     }
   }
 
+  /**
+   * Закрывает календарь и удаляет вспомогательные обработчики.
+   */
   close() {
     if (!this.dropdown || !this.isOpen) {
       return;
@@ -308,6 +331,9 @@ class AvailabilityDatePicker {
     }
   }
 
+  /**
+   * Строит DOM календаря за выбранный месяц и помечает доступные дни.
+   */
   renderCalendar() {
     if (!this.dropdown) {
       return;
@@ -419,6 +445,9 @@ class AvailabilityDatePicker {
     this.dropdown.append(calendar);
   }
 
+  /**
+   * Устанавливает фокус на выбранную дату или первую доступную ячейку календаря.
+   */
   focusInitialDay() {
     if (!this.dropdown) {
       return;
@@ -677,7 +706,15 @@ for (const radio of violationModeRadios) {
   });
 }
 
-// Загружаю очередной Excel-файл, раскладываю данные по нужному состоянию и инициирую обновления интерфейса.
+/**
+ * Загружает Excel-файл, извлекает записи и обновляет состояние приложения.
+ * После считывания автоматически настраивает соответствия колонок, доступные фильтры
+ * и планирует пересчёт отчёта.
+ *
+ * @param {'violations' | 'objects'} kind Тип загружаемого набора данных.
+ * @param {File} file Объект файла, выбранный пользователем.
+ * @returns {Promise<void>} Промис завершается после обновления интерфейса.
+ */
 async function loadDataset(kind, file) {
   try {
     // Сообщаю пользователю, что файл читается.
@@ -734,7 +771,14 @@ function setLoadingIndicator(kind, isLoading, fileName) {
   }
 }
 
-// Читаю Excel и вытаскиваю из него данные с учётом того, где примерно могут лежать заголовки.
+/**
+ * Читает Excel-файл и подбирает строку заголовков для последующей агрегации данных.
+ * Используется для обоих наборов данных — нарушений и объектов.
+ *
+ * @param {File} file Файл Excel, загруженный пользователем.
+ * @param {string[]} headerKeywords Перечень ключевых слов, помогающих определить строку заголовков.
+ * @returns {Promise<{records: object[], headers: string[]}>} Набор записей и найденные заголовки.
+ */
 async function readExcelFile(file, headerKeywords) {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -756,7 +800,15 @@ async function readExcelFile(file, headerKeywords) {
   return { records, headers };
 }
 
-// Подбираю ту строку, которая больше всего похожа на заголовок (ищу текст и совпадения по ключевым словам).
+/**
+ * Определяет индекс строки, наиболее похожей на строку заголовков.
+ * Строка выбирается по количеству текстовых значений и совпадениям с ожидаемыми именами столбцов.
+ *
+ * @param {XLSX.WorkSheet} sheet Активный лист книги Excel.
+ * @param {XLSX.Range} range Рабочий диапазон листа.
+ * @param {string[]} headerKeywords Нормализованные ключевые слова для заголовков.
+ * @returns {number | null} Индекс строки заголовков либо null, если строка не найдена.
+ */
 function detectHeaderRowIndex(sheet, range, headerKeywords) {
   const normalizedKeywords = headerKeywords.map((item) => normalizeHeaderValue(item));
   let bestRowIndex = null;
@@ -799,7 +851,12 @@ function detectHeaderRowIndex(sheet, range, headerKeywords) {
   return bestRowIndex;
 }
 
-// Привожу заголовки к единому виду: убираю лишние пробелы, перевожу в нижний регистр.
+/**
+ * Унифицирует заголовок для сравнения: убирает лишние пробелы и приводит к нижнему регистру.
+ *
+ * @param {unknown} value Значение ячейки заголовка.
+ * @returns {string} Нормализованная строка.
+ */
 function normalizeHeaderValue(value) {
   if (typeof value === 'string') {
     return value.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -810,7 +867,14 @@ function normalizeHeaderValue(value) {
   return String(value).trim().toLowerCase();
 }
 
-// Собираю значения из найденной строки заголовков.
+/**
+ * Извлекает заголовки столбцов из выбранной строки.
+ *
+ * @param {XLSX.WorkSheet} sheet Активный лист книги Excel.
+ * @param {number} rowIndex Индекс строки заголовков.
+ * @param {XLSX.Range} range Рабочий диапазон листа.
+ * @returns {string[]} Массив подписей столбцов.
+ */
 function extractHeaderRow(sheet, rowIndex, range) {
   const headers = [];
   for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
@@ -821,7 +885,14 @@ function extractHeaderRow(sheet, rowIndex, range) {
   return headers;
 }
 
-// Формирую массив объектов-строк на основе заголовков, пропуская полностью пустые строки.
+/**
+ * Собирает записи на основе найденных заголовков, пропуская пустые строки.
+ *
+ * @param {XLSX.WorkSheet} sheet Активный лист книги Excel.
+ * @param {number} headerRowIndex Индекс строки заголовков.
+ * @param {string[]} headers Список заголовков.
+ * @returns {object[]} Массив объектов со значениями строк.
+ */
 function extractRecords(sheet, headerRowIndex, headers) {
   const range = XLSX.utils.decode_range(sheet['!ref']);
   const records = [];
@@ -848,7 +919,12 @@ function extractRecords(sheet, headerRowIndex, headers) {
   return records;
 }
 
-// Аккуратно вытаскиваю значение из ячейки, не теряя числовые и булевы типы.
+/**
+ * Преобразует значение ячейки в читаемый формат, сохраняя числовые и булевы типы.
+ *
+ * @param {XLSX.CellObject | undefined} cell Ячейка таблицы.
+ * @returns {string | number | boolean | Date | ''} Подготовленное значение.
+ */
 function extractCellValue(cell) {
   if (!cell) {
     return '';
@@ -865,7 +941,13 @@ function extractCellValue(cell) {
   return cell.v ?? '';
 }
 
-// Строю авто-сопоставление «ключ поля → колонка» по заранее заданным синонимам.
+/**
+ * Автоматически сопоставляет ключевые поля с колонками исходной таблицы.
+ *
+ * @param {string[]} columns Названия колонок, найденные в файле.
+ * @param {Array<{key: string, candidates: string[]}>} definitions Описание полей и допустимых названий.
+ * @returns {Record<string, string>} Карта соответствий ключей и названий колонок.
+ */
 function autoMapColumns(columns, definitions) {
   const mapping = {};
   for (const definition of definitions) {
@@ -887,7 +969,9 @@ function autoMapColumns(columns, definitions) {
   return mapping;
 }
 
-// На основе текущих данных рисую выпадающие списки с сопоставлением колонок.
+/**
+ * Строит секцию с настройками сопоставления колонок для загруженных таблиц.
+ */
 function renderMappings() {
   elements.mappingSection.hidden = !(state.violations.length || state.objects.length);
   elements.violationsMapping.innerHTML = '';
@@ -908,7 +992,15 @@ function renderMappings() {
   }
 }
 
-// Вспомогательная функция, которая собирает список select'ов для конкретного набора полей.
+/**
+ * Создаёт DOM-элементы select для выбора колонок под каждое требуемое поле.
+ *
+ * @param {HTMLElement} container Контейнер для вывода списка сопоставлений.
+ * @param {string[]} columns Массив названий колонок.
+ * @param {Array<{key: string, label: string}>} definitions Схема ожидаемых полей.
+ * @param {Record<string, string>} mapping Текущее сопоставление ключей и колонок.
+ * @param {(key: string, value: string) => void} onChange Колбэк при изменении выбранной колонки.
+ */
 function renderMappingList(container, columns, definitions, mapping, onChange) {
   const fragment = document.createDocumentFragment();
   for (const definition of definitions) {
@@ -945,7 +1037,9 @@ function renderMappingList(container, columns, definitions, mapping, onChange) {
   container.append(fragment);
 }
 
-// Управляю видимостью секций, чтобы интерфейс не расползался до загрузки обоих файлов.
+/**
+ * Управляет видимостью основных секций интерфейса на основе состояния данных.
+ */
 function updateVisibility() {
   const ready = state.violations.length && state.objects.length;
   elements.mappingSection.hidden = !(state.violations.length || state.objects.length);
@@ -956,7 +1050,9 @@ function updateVisibility() {
   }
 }
 
-// Пересобираю списки доступных дат и типов объектов исходя из свежих данных и выбранных колонок.
+/**
+ * Обновляет доступные фильтры (даты, типы, нарушения) в соответствии с загруженными данными.
+ */
 function updateAvailableFilters() {
   if (!(state.violations.length && state.objects.length)) {
     return;
@@ -995,6 +1091,13 @@ function updateAvailableFilters() {
   updateDataSourceControl();
 }
 
+/**
+ * Обновляет конкретный датапикер новым набором доступных дат.
+ *
+ * @param {AvailabilityDatePicker | undefined} picker Экземпляр датапикера.
+ * @param {Array<{iso: string, date: Date}>} dates Список доступных дат.
+ * @param {number | null} defaultIndex Индекс даты по умолчанию.
+ */
 function updateDatePicker(picker, dates, defaultIndex) {
   if (!picker) {
     return;
@@ -1012,6 +1115,23 @@ function updateDatePicker(picker, dates, defaultIndex) {
   picker.setValue(nextValue);
 }
 
+/**
+ * Отрисовывает компонент с тегами, поиском и выпадающим списком значений.
+ * Используется для выбора типов объектов и наименований нарушений.
+ *
+ * @param {Object} options Настройки компонента мультiselect.
+ * @param {HTMLElement} options.container Контейнер для вывода элемента.
+ * @param {string[]} options.values Доступные значения.
+ * @param {string[]} options.selectedValues Уже выбранные значения.
+ * @param {boolean} options.disabled Флаг блокировки компонента.
+ * @param {string} options.placeholder Подсказка внутри поля поиска.
+ * @param {string} options.emptyLabel Сообщение при отсутствии значений.
+ * @param {number} options.limit Максимальное количество значений.
+ * @param {string} options.limitMessage Сообщение при превышении лимита.
+ * @param {HTMLElement} [options.messageElement] Узел для вывода подсказок.
+ * @param {(value: string) => void} [options.onAdd] Колбэк при добавлении значения.
+ * @param {(value: string) => void} [options.onRemove] Колбэк при удалении значения.
+ */
 function renderSearchableMultiselect(options) {
   const {
     container,
@@ -1174,6 +1294,9 @@ function renderSearchableMultiselect(options) {
   }
 }
 
+/**
+ * Отрисовывает интерфейс выбора типов объектов контроля.
+ */
 function renderTypeOptions() {
   renderSearchableMultiselect({
     container: elements.typeOptions,
@@ -1210,6 +1333,9 @@ function renderTypeOptions() {
   });
 }
 
+/**
+ * Отрисовывает интерфейс выбора наименований нарушений.
+ */
 function renderViolationOptions() {
   renderSearchableMultiselect({
     container: elements.violationOptions,
@@ -1246,7 +1372,9 @@ function renderViolationOptions() {
   });
 }
 
-// Настройки источника данных требуют отдельной обработки.
+/**
+ * Управляет состоянием фильтра по источнику данных и вспомогательным сообщением.
+ */
 function updateDataSourceControl() {
   if (!elements.dataSourceSelect || !elements.dataSourceMessage) {
     return;
@@ -1275,6 +1403,12 @@ function updateDataSourceControl() {
   }
 }
 
+/**
+ * Анализирует колонку источника данных и определяет, какие категории присутствуют.
+ *
+ * @param {string} column Название колонки с источником данных.
+ * @returns {{oati: boolean, cafap: boolean, both: boolean, unknown: boolean}} Сводка по категориям источников.
+ */
 function summarizeDataSourceCategories(column) {
   const summary = { oati: false, cafap: false, both: false, unknown: false };
   for (const record of state.violations) {
@@ -1299,7 +1433,11 @@ function summarizeDataSourceCategories(column) {
   return summary;
 }
 
-// Управляю состоянием кнопки выгрузки, чтобы не давать скачивать устаревшие данные.
+/**
+ * Переключает доступность кнопки экспорта в Excel.
+ *
+ * @param {boolean} isEnabled Признак доступности выгрузки.
+ */
 function setExportAvailability(isEnabled) {
   if (!elements.downloadButton) {
     return;
@@ -1308,14 +1446,18 @@ function setExportAvailability(isEnabled) {
   elements.downloadButton.setAttribute('aria-disabled', String(!isEnabled));
 }
 
-// Каждое новое пересчитывание отчёта сбрасывает кеш и блокирует выгрузку до готовности.
+/**
+ * Сбрасывает кеш отчёта и блокирует кнопку выгрузки.
+ */
 function resetExportState() {
   state.lastReport = null;
   state.lastPeriods = null;
   setExportAvailability(false);
 }
 
-// Если нужно пересчитать отчёт прямо сейчас, то отменяю ранее запланированное обновление.
+/**
+ * Отменяет запланированное обновление предпросмотра.
+ */
 function cancelScheduledPreviewUpdate() {
   if (scheduledPreviewHandle === null) {
     return;
@@ -1330,7 +1472,12 @@ function cancelScheduledPreviewUpdate() {
   scheduledPreviewKind = null;
 }
 
-// Очередь пересчёта: объединяю пачку событий в один пересчёт за кадр.
+/**
+ * Планирует пересчёт предпросмотра. Для групп событий используется requestAnimationFrame,
+ * а при принудительном обновлении пересчёт выполняется немедленно.
+ *
+ * @param {{immediate?: boolean}} [options] Настройки поведения функции.
+ */
 function schedulePreviewUpdate(options = {}) {
   const { immediate = false } = options;
   if (immediate) {
@@ -1356,7 +1503,10 @@ function schedulePreviewUpdate(options = {}) {
   scheduledPreviewKind = 'timeout';
 }
 
-// Здесь собрана вся бизнес-логика подготовки отчёта и таблицы.
+/**
+ * Выполняет пересчёт отчёта с учётом всех выбранных фильтров и параметров.
+ * Результат отображается в таблице предпросмотра и готовится к экспорту.
+ */
 function runPreviewUpdate() {
   resetExportState();
   if (!(state.violations.length && state.objects.length)) {
@@ -1399,12 +1549,24 @@ function runPreviewUpdate() {
   setExportAvailability(true);
 }
 
-// Проверяю, что пользователь проставил все необходимые соответствия.
+/**
+ * Проверяет, что пользователь указал колонки для всех обязательных полей.
+ *
+ * @param {Record<string, string>} mapping Карта соответствий «ключ поля → колонка».
+ * @param {Array<{key: string, optional?: boolean}>} definitions Список ожидаемых полей.
+ * @returns {boolean} true, если сопоставление заполнено.
+ */
 function isMappingComplete(mapping, definitions) {
   return definitions.every((definition) => definition.optional || Boolean(mapping[definition.key]));
 }
 
-// Собираю выбранные диапазоны дат и параллельно валидирую ввод.
+/**
+ * Считывает выбранные пользователем периоды отчёта и предыдущего периода.
+ * Одновременно выполняет базовую валидацию.
+ *
+ * @returns {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}} | null}
+ *   Возвращает объект с выбранными периодами или null при ошибке.
+ */
 function getSelectedPeriods() {
   const currentStartIso = elements.currentStart?.value ?? '';
   const currentEndIso = elements.currentEnd?.value ?? '';
@@ -1439,7 +1601,12 @@ function getSelectedPeriods() {
   };
 }
 
-// Формирую человекочитаемое отображение округа: сначала стараюсь подобрать сокращение.
+/**
+ * Возвращает человекочитаемое название округа, предпочитая официальные сокращения.
+ *
+ * @param {string} label Исходное значение из данных.
+ * @returns {string} Округ для отображения.
+ */
 function getDistrictDisplayLabel(label) {
   if (!label) {
     return 'Без округа';
@@ -1457,7 +1624,12 @@ function getDistrictDisplayLabel(label) {
   return trimmed || 'Без округа';
 }
 
-// Привожу обозначение округа к ключу, пригодному для сравнения и агрегации.
+/**
+ * Нормализует название округа для внутренних ключей (в нижнем регистре без лишних символов).
+ *
+ * @param {string} value Значение округа.
+ * @returns {string} Нормализованный ключ.
+ */
 function normalizeDistrictKey(value) {
   const normalized = normalizeKey(value);
   if (!normalized) {
@@ -1468,7 +1640,15 @@ function normalizeDistrictKey(value) {
   return withoutCityMention.replace(/\s+/g, ' ').trim();
 }
 
-// Собираю словарь округов, чтобы грамотно сводить надписи вида «г. Москва, ЦАО» к единому виду.
+/**
+ * Формирует таблицу соответствий между оригинальными подписями округов и отображаемыми значениями.
+ *
+ * @param {object[]} objectRecords Записи из справочника объектов.
+ * @param {string} objectDistrictColumn Название колонки с округом в справочнике.
+ * @param {object[]} violationRecords Записи из таблицы нарушений.
+ * @param {string} violationDistrictColumn Название колонки с округом в таблице нарушений.
+ * @returns {Map<string, string>} Словарь «нормализованный ключ → отображаемое значение».
+ */
 function buildDistrictLookup(objectRecords, objectDistrictColumn, violationRecords, violationDistrictColumn) {
   const lookup = new Map();
 
@@ -1505,7 +1685,13 @@ function buildDistrictLookup(objectRecords, objectDistrictColumn, violationRecor
   return lookup;
 }
 
-// Решаю, стоит ли заменить уже сохранённое название округа на новое (например, на более короткое сокращение).
+/**
+ * Определяет, нужно ли заменить существующее отображаемое имя округа новым вариантом.
+ *
+ * @param {string} current Текущее значение в словаре.
+ * @param {string} candidate Кандидат для замены.
+ * @returns {boolean} true, если стоит заменить значение.
+ */
 function shouldReplaceDistrictLabel(current, candidate) {
   if (!candidate || candidate === current) {
     return false;
@@ -1528,7 +1714,13 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 // Пример использования: buildDistrictLookup([{ district: 'Центральный административный округ' }], 'district', [], 'district');
 
-// Главная функция агрегации: собирает метрики по округам и суммарную строку.
+/**
+ * Строит отчёт по округам на основании выбранных фильтров и периодов.
+ *
+ * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods
+ *   Выбранные пользователем периоды.
+ * @returns {{rows: Array<object>, totalRow: object}} Строки отчёта и итоговая строка.
+ */
 function buildReport(periods) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
@@ -1759,11 +1951,21 @@ function buildReport(periods) {
   return { rows, totalRow };
 }
 
-// Рисую итоговую таблицу в DOM, придерживаясь структуры thead/tbody/tfoot.
+/**
+ * Создаёт HTML-таблицу предпросмотра, придерживаясь структуры thead/tbody/tfoot.
+ * Одновременно формирует подпись таблицы с описанием диапазона и источника данных.
+ *
+ * @param {{rows: Array<object>, totalRow: object}} report Агрегированные строки отчёта.
+ * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Выбранные периоды.
+ */
 function renderReportTable(report, periods) {
   const headers = buildTableHeaders(periods);
   const table = elements.reportTable;
   table.innerHTML = '';
+
+  const caption = document.createElement('caption');
+  caption.textContent = buildTableCaption(report, periods);
+  table.append(caption);
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
@@ -1786,7 +1988,12 @@ function renderReportTable(report, periods) {
   table.append(tfoot);
 }
 
-// Создаю строку таблицы с нужными форматами чисел и процентов.
+/**
+ * Создаёт строку таблицы на основе агрегированной записи отчёта.
+ *
+ * @param {object} row Данные строки отчёта.
+ * @returns {HTMLTableRowElement} DOM-элемент строки.
+ */
 function createRowElement(row) {
   const tr = document.createElement('tr');
   tr.append(createCell(row.label, true));
@@ -1802,7 +2009,13 @@ function createRowElement(row) {
   return tr;
 }
 
-// Универсальный помощник для создания ячеек: пригодится и для th, и для td.
+/**
+ * Создаёт ячейку таблицы с текстовым содержимым.
+ *
+ * @param {string} value Значение внутри ячейки.
+ * @param {boolean} [isHeader=false] true, если требуется ячейка th.
+ * @returns {HTMLTableCellElement} DOM-элемент ячейки.
+ */
 function createCell(value, isHeader = false) {
   const cell = document.createElement(isHeader ? 'th' : 'td');
   cell.textContent = value ?? '';
@@ -1827,7 +2040,26 @@ function buildTableHeaders(periods) {
   ];
 }
 
-// Подбираю надпись для столбца «Всего», учитывая выбранные типы объектов.
+/**
+ * Формирует подпись для таблицы предпросмотра с описанием периода, источника данных и количества строк.
+ *
+ * @param {{rows: Array<object>}} report Агрегированные данные отчёта.
+ * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Выбранные периоды.
+ * @returns {string} Текст подписи для таблицы.
+ */
+function buildTableCaption(report, periods) {
+  const currentRange = formatPeriodRange(periods.current);
+  const rowsDescription = `Строк в таблице: ${numberFormatter.format(report.rows.length)}.`;
+  const dataSourceDescription = describeSelectedDataSource();
+  const base = currentRange ? `Отчёт за период ${currentRange}.` : 'Отчётный период не выбран.';
+  return `${base} ${dataSourceDescription}. ${rowsDescription}`.trim();
+}
+
+/**
+ * Возвращает название столбца «Всего» с учётом выбранных типов объектов.
+ *
+ * @returns {string} Подпись столбца.
+ */
 function buildTotalHeader() {
   if (state.typeMode === 'all' || !state.customTypes.length) {
     return 'Всего ОДХ';
@@ -1838,6 +2070,12 @@ function buildTotalHeader() {
   return `Всего (${state.customTypes.join(', ')})`;
 }
 
+/**
+ * Формирует строку с номерами показателей для выгрузки в Excel.
+ *
+ * @param {number} columnCount Количество колонок в таблице.
+ * @returns {Array<string | number>} Список обозначений.
+ */
 function buildExcelHeaderNumbers(columnCount) {
   const template = [1, 2, 3, 4, '4.1', '4.2', 5, 6, '6.1', '6.2'];
   if (columnCount <= template.length) {
@@ -1850,6 +2088,12 @@ function buildExcelHeaderNumbers(columnCount) {
   return extended;
 }
 
+/**
+ * Собирает заголовок листа Excel с учётом выбранного периода и источника данных.
+ *
+ * @param {{current?: {start: Date, end: Date}}} periods Выбранные периоды.
+ * @returns {string} Заголовок листа Excel.
+ */
 function buildExcelTitle(periods) {
   const periodRange = formatTitlePeriod(periods?.current);
   const parts = ['Нарушения на ОДХ'];
@@ -1863,6 +2107,11 @@ function buildExcelTitle(periods) {
   return parts.join(', ');
 }
 
+/**
+ * Возвращает текстовое описание источников данных для заголовка Excel.
+ *
+ * @returns {string} Фраза для заголовка.
+ */
 function describeDataSourceForTitle() {
   switch (state.dataSourceOption) {
     case 'oati':
@@ -1874,23 +2123,38 @@ function describeDataSourceForTitle() {
   }
 }
 
-// Очищаю таблицу — пригодится в сценариях с ошибками и сменой фильтров.
+/**
+ * Удаляет все строки из таблицы предпросмотра.
+ */
 function clearTable() {
   elements.reportTable.innerHTML = '';
 }
 
-// Сообщения пользователю отображаю в одном месте, чтобы не размазывать текст по коду.
+/**
+ * Отображает текстовое сообщение под таблицей предпросмотра.
+ *
+ * @param {string} message Текст сообщения для пользователя.
+ */
 function showPreviewMessage(message) {
   elements.previewMessage.textContent = message;
 }
 
-// Превращаю ISO-строку вида «2024-03-15» в объект Date без временной части.
+/**
+ * Преобразует ISO-строку в объект Date без учёта временной части.
+ *
+ * @param {string} iso Строка формата YYYY-MM-DD.
+ * @returns {Date} Объект даты.
+ */
 function parseIsoDate(iso) {
   const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
   return new Date(year, month - 1, day);
 }
 
-// Готовлю предикат для фильтрации по типам объектов с учётом выбранного режима.
+/**
+ * Возвращает предикат для фильтрации записей по типам объектов.
+ *
+ * @returns {(value: string) => boolean} Функция-предикат.
+ */
 function createTypePredicate() {
   if (state.typeMode === 'all' || !state.customTypes.length) {
     return () => true;
@@ -1899,6 +2163,11 @@ function createTypePredicate() {
   return (value) => allowed.has(normalizeKey(value));
 }
 
+/**
+ * Возвращает предикат для фильтрации по наименованиям нарушений.
+ *
+ * @returns {(value: string) => boolean} Функция-предикат.
+ */
 function createViolationPredicate() {
   if (state.violationMode === 'all' || !state.customViolations.length) {
     return () => true;
@@ -1907,6 +2176,11 @@ function createViolationPredicate() {
   return (value) => allowed.has(normalizeKey(value));
 }
 
+/**
+ * Возвращает предикат для фильтрации записей по источнику данных.
+ *
+ * @returns {(record: object) => boolean} Функция-предикат.
+ */
 function createDataSourcePredicate() {
   const column = state.violationMapping.dataSource;
   if (!column) {
@@ -1931,7 +2205,12 @@ function createDataSourcePredicate() {
   };
 }
 
-// Универсальный способ привести строку к нижнему регистру и убрать лишние пробелы.
+/**
+ * Унифицированная нормализация строк: обрезает пробелы и приводит к нижнему регистру.
+ *
+ * @param {unknown} value Значение для нормализации.
+ * @returns {string} Нормализованный ключ.
+ */
 function normalizeKey(value) {
   if (value === null || value === undefined) {
     return '';
@@ -1939,12 +2218,22 @@ function normalizeKey(value) {
   return value.toString().trim().toLowerCase();
 }
 
-// Просто обёртка над normalizeKey — оставил для лучшей читаемости кода выше.
+/**
+ * Обёртка над normalizeKey для лучшей читаемости вызовов выше по коду.
+ *
+ * @param {unknown} value Значение для нормализации.
+ * @returns {string} Нормализованное значение.
+ */
 function normalizeText(value) {
   return normalizeKey(value);
 }
 
-// Перевожу значение в строку так, чтобы его можно было спокойно показывать в интерфейсе.
+/**
+ * Преобразует значение в строку, пригодную для отображения в интерфейсе или логах.
+ *
+ * @param {unknown} value Исходное значение.
+ * @returns {string} Подготовленная строка.
+ */
 function getValueAsString(value) {
   if (value === null || value === undefined) {
     return '';
@@ -1958,6 +2247,12 @@ function getValueAsString(value) {
   return value.toString().trim();
 }
 
+/**
+ * Определяет категорию источника данных по тексту ячейки.
+ *
+ * @param {unknown} value Значение из колонки источника данных.
+ * @returns {'oati' | 'cafap' | 'both' | ''} Выбранная категория или пустая строка.
+ */
 function categorizeDataSource(value) {
   const text = getValueAsString(value);
   const normalized = normalizeText(text);
@@ -1978,7 +2273,13 @@ function categorizeDataSource(value) {
   return '';
 }
 
-// Выдираю уникальные даты из нужной колонки и сортирую их.
+/**
+ * Извлекает уникальные даты из указанной колонки и возвращает их в отсортированном виде.
+ *
+ * @param {object[]} records Массив записей.
+ * @param {string} column Название колонки с датами.
+ * @returns {Array<{iso: string, date: Date}>} Упорядоченный массив дат.
+ */
 function extractUniqueDates(records, column) {
   const dates = [];
   const seen = new Set();
@@ -1998,7 +2299,12 @@ function extractUniqueDates(records, column) {
   return dates;
 }
 
-// Привожу значение из Excel к Date, учитывая возможные форматы (число, строка, объект Date).
+/**
+ * Конвертирует значение из Excel в объект Date, поддерживая число, строку или Date.
+ *
+ * @param {unknown} value Значение ячейки.
+ * @returns {Date | null} Объект даты или null, если преобразование невозможно.
+ */
 function parseDateValue(value) {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -2032,7 +2338,12 @@ function parseDateValue(value) {
   return null;
 }
 
-// Простой форматтер для ISO-строки — пригодился в select'ах и названиях файлов.
+/**
+ * Форматирует объект Date в ISO-строку без времени (YYYY-MM-DD).
+ *
+ * @param {Date} date Объект даты.
+ * @returns {string} ISO-строка.
+ */
 function formatIsoDate(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -2040,7 +2351,12 @@ function formatIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-// Отображаю даты в привычном формате «дд.мм.гггг».
+/**
+ * Форматирует дату в строку вида «дд.мм.гггг».
+ *
+ * @param {Date} date Объект даты.
+ * @returns {string} Отформатированная строка.
+ */
 function formatDateDisplay(date) {
   if (!(date instanceof Date)) {
     return '';
@@ -2051,6 +2367,12 @@ function formatDateDisplay(date) {
   return `${day}.${month}.${year}`;
 }
 
+/**
+ * Форматирует дату в короткий вид «дд.мм».
+ *
+ * @param {Date} date Объект даты.
+ * @returns {string} Строка без года.
+ */
 function formatDateDisplayShort(date) {
   if (!(date instanceof Date)) {
     return '';
@@ -2060,7 +2382,13 @@ function formatDateDisplayShort(date) {
   return `${day}.${month}`;
 }
 
-// Собираю уникальные строки из указанной колонки, сохраняя оригинальное написание.
+/**
+ * Возвращает список уникальных значений из указанной колонки, сохраняя оригинальное написание.
+ *
+ * @param {object[]} records Набор записей.
+ * @param {string} column Название колонки.
+ * @returns {string[]} Уникальные значения.
+ */
 function collectUniqueValues(records, column) {
   if (!column) {
     return [];
@@ -2080,7 +2408,13 @@ function collectUniqueValues(records, column) {
   return Array.from(seen.values());
 }
 
-// Проверяю, попадает ли дата в выбранный диапазон (с учётом только календарной части).
+/**
+ * Проверяет, попадает ли дата в диапазон (без учёта времени).
+ *
+ * @param {Date} date Проверяемая дата.
+ * @param {{start: Date, end: Date}} period Диапазон дат.
+ * @returns {boolean} true, если дата внутри диапазона.
+ */
 function isWithinPeriod(date, period) {
   if (!period) {
     return false;
@@ -2089,7 +2423,13 @@ function isWithinPeriod(date, period) {
   return dateOnly >= period.start && dateOnly <= period.end;
 }
 
-// Расчёт процента с защитой от деления на ноль.
+/**
+ * Рассчитывает процентное значение с защитой от деления на ноль.
+ *
+ * @param {number} part Числитель.
+ * @param {number} total Знаменатель.
+ * @returns {number} Процент.
+ */
 function computePercent(part, total) {
   if (!total || !Number.isFinite(part)) {
     return 0;
@@ -2097,7 +2437,12 @@ function computePercent(part, total) {
   return (part / total) * 100;
 }
 
-// Форматирую целые значения с пробелами-разделителями.
+/**
+ * Форматирует целое число с пробелами в качестве разделителей тысяч.
+ *
+ * @param {number} value Число.
+ * @returns {string} Отформатированная строка.
+ */
 function formatInteger(value) {
   if (!Number.isFinite(value)) {
     return '0';
@@ -2105,7 +2450,12 @@ function formatInteger(value) {
   return numberFormatter.format(Math.round(value));
 }
 
-// Проценты показываю с точностью до одного десятичного знака.
+/**
+ * Форматирует процент с точностью до одного десятичного знака.
+ *
+ * @param {number} value Значение в процентах.
+ * @returns {string} Строка с процентом.
+ */
 function formatPercent(value) {
   if (!Number.isFinite(value)) {
     return '0';
@@ -2113,7 +2463,12 @@ function formatPercent(value) {
   return value.toFixed(1);
 }
 
-// Генерация Excel-файла: учитываю стили, объединение ячеек и форматирование чисел.
+/**
+ * Генерирует Excel-файл на основе агрегированного отчёта и инициирует скачивание пользователю.
+ *
+ * @param {{rows: Array<object>, totalRow: object}} report Данные отчёта.
+ * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Периоды отчёта.
+ */
 function exportReportToExcel(report, periods) {
   try {
     const headers = buildTableHeaders(periods);
@@ -2247,7 +2602,12 @@ function exportReportToExcel(report, periods) {
   }
 }
 
-// Готовлю массив значений для записи строки в Excel (проценты перевожу в доли).
+/**
+ * Преобразует строку отчёта в массив значений для записи в Excel.
+ *
+ * @param {object} row Строка отчёта.
+ * @returns {Array<string | number>} Значения, готовые к записи в XLSX.
+ */
 function buildExportDataRow(row) {
   return [
     row.label ?? '',
@@ -2263,7 +2623,12 @@ function buildExportDataRow(row) {
   ];
 }
 
-// Страхуюсь от NaN: Excel не любит нечисловые значения в числовых столбцах.
+/**
+ * Гарантирует числовое значение для Excel, заменяя NaN и Infinity на ноль.
+ *
+ * @param {unknown} value Исходное значение.
+ * @returns {number} Безопасное число.
+ */
 function safeNumber(value) {
   if (!Number.isFinite(value)) {
     return 0;
@@ -2271,7 +2636,14 @@ function safeNumber(value) {
   return Number(value);
 }
 
-// Накладываю на ячейку набор стилей, аккуратно объединяя их.
+/**
+ * Применяет набор стилевых объектов к конкретной ячейке листа.
+ *
+ * @param {XLSX.WorkSheet} sheet Лист Excel.
+ * @param {number} rowIndex Индекс строки.
+ * @param {number} colIndex Индекс столбца.
+ * @param {...object} styles Стилевые объекты для объединения.
+ */
 function setCellStyle(sheet, rowIndex, colIndex, ...styles) {
   const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
   const cell = sheet[address];
@@ -2281,7 +2653,14 @@ function setCellStyle(sheet, rowIndex, colIndex, ...styles) {
   cell.s = mergeStyles(cell.s ?? {}, ...styles);
 }
 
-// Назначаю числовой формат ячейке — пригодится для процентов и целых.
+/**
+ * Устанавливает числовой формат ячейки (например, проценты или целые числа).
+ *
+ * @param {XLSX.WorkSheet} sheet Лист Excel.
+ * @param {number} rowIndex Индекс строки.
+ * @param {number} colIndex Индекс столбца.
+ * @param {string} format Формат для XLSX.
+ */
 function setNumberFormat(sheet, rowIndex, colIndex, format) {
   const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
   const cell = sheet[address];
@@ -2291,7 +2670,12 @@ function setNumberFormat(sheet, rowIndex, colIndex, format) {
   cell.z = format;
 }
 
-// Аккуратно сливаю несколько объектов стилей в один.
+/**
+ * Глубоко объединяет несколько стилевых объектов XLSX.
+ *
+ * @param {...object} styles Стилевые объекты.
+ * @returns {object} Объединённый стиль.
+ */
 function mergeStyles(...styles) {
   const result = {};
   for (const style of styles) {
@@ -2302,6 +2686,11 @@ function mergeStyles(...styles) {
   return result;
 }
 
+/**
+ * Возвращает человекочитаемое описание выбранных источников данных.
+ *
+ * @returns {string} Описание источника.
+ */
 function describeSelectedDataSource() {
   switch (state.dataSourceOption) {
     case 'oati':
@@ -2313,7 +2702,13 @@ function describeSelectedDataSource() {
   }
 }
 
-// Рекурсивное слияние объектов — минимальная реализация без внешних зависимостей.
+/**
+ * Рекурсивно объединяет свойства объектов без использования внешних зависимостей.
+ *
+ * @param {object} target Целевой объект.
+ * @param {object} source Источник свойств.
+ * @returns {object} Изменённый целевой объект.
+ */
 function deepMerge(target, source) {
   for (const [key, value] of Object.entries(source)) {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -2328,7 +2723,12 @@ function deepMerge(target, source) {
   return target;
 }
 
-// Унифицированный стиль рамки, чтобы не дублировать одну и ту же структуру.
+/**
+ * Возвращает объект с настройками рамки для ячейки Excel.
+ *
+ * @param {string} color Цвет рамки.
+ * @returns {object} Объект настроек рамки.
+ */
 function buildBorderStyle(color) {
   return {
     top: { style: 'thin', color: { rgb: color } },
@@ -2338,7 +2738,12 @@ function buildBorderStyle(color) {
   };
 }
 
-// Красиво отображаю диапазон дат в описательной части Excel-отчёта.
+/**
+ * Формирует строку диапазона дат для описательной части отчёта.
+ *
+ * @param {{start: Date, end: Date}} period Диапазон дат.
+ * @returns {string} Строка с датами.
+ */
 function formatPeriodRange(period) {
   if (!period) {
     return '';
@@ -2351,6 +2756,12 @@ function formatPeriodRange(period) {
   return `${start} — ${end}`;
 }
 
+/**
+ * Формирует компактное представление диапазона для заголовков.
+ *
+ * @param {{start: Date, end: Date}} period Диапазон дат.
+ * @returns {string} Краткое описание периода.
+ */
 function formatTitlePeriod(period) {
   if (!period) {
     return '';
@@ -2367,7 +2778,12 @@ function formatTitlePeriod(period) {
   return `${start} — ${end}`;
 }
 
-// Подготавливаю дату для безопасного использования в имени файла.
+/**
+ * Подготавливает дату для включения в имя файла.
+ *
+ * @param {Date} date Объект даты.
+ * @returns {string} Строка вида YYYY-MM-DD.
+ */
 function formatDateForFileName(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -2375,7 +2791,12 @@ function formatDateForFileName(date) {
   return `${year}-${month}-${day}`;
 }
 
-// Формирую итоговое имя файла и вычищаю недопустимые символы.
+/**
+ * Генерирует безопасное имя файла для выгрузки отчёта.
+ *
+ * @param {{current: {start: Date, end: Date}}} periods Диапазон отчётного периода.
+ * @returns {string} Имя файла.
+ */
 function buildExportFileName(periods) {
   const start = formatDateForFileName(periods.current.start);
   const end = formatDateForFileName(periods.current.end);
