@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
-import tkinter as tk
+import sys
 from datetime import date, datetime
+from pathlib import Path
+import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Sequence
 
-from report_builder import (
+if __package__ in {None, ""}:
+    package_root = Path(__file__).resolve().parent
+    parent_directory = package_root.parent
+    if str(parent_directory) not in sys.path:
+        sys.path.insert(0, str(parent_directory))
+
+from MVP.report_builder import (
     DateRange,
     ReportConfig,
     auto_map_columns,
