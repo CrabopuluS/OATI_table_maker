@@ -1786,14 +1786,14 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 function buildObjectIdentifierCandidates(idValue, nameValue, externalIdValue = '') {
   const candidates = [];
-  const normalizedExternalId = normalizeKey(getValueAsString(externalIdValue));
-  if (normalizedExternalId) {
-    candidates.push(`external:${normalizedExternalId}`);
-  }
   const normalizedId = normalizeKey(getValueAsString(idValue));
+  const normalizedExternalId = normalizeKey(getValueAsString(externalIdValue));
   const normalizedName = normalizeKey(getValueAsString(nameValue));
   if (normalizedId) {
     candidates.push(`id:${normalizedId}`);
+  }
+  if (normalizedExternalId) {
+    candidates.push(`external:${normalizedExternalId}`);
   }
   if (normalizedName) {
     candidates.push(`name:${normalizedName}`);
@@ -2184,7 +2184,7 @@ function createCell(value, isHeader = false) {
 // Формирую заголовки таблицы, включая динамический текст по выбранному периоду.
 function buildTableHeaders(periods) {
   const totalHeader = buildTotalHeader();
-  const rangeHeader = `Проверено ОДХ с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
+  const rangeHeader = `Проверено объектов контроля с  ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
   return [
     'Округ',
     totalHeader,
