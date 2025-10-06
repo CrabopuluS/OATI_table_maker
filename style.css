@@ -294,23 +294,31 @@ body.theme-dark .app-background {
 
 .header-brand {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 1.5rem;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   align-items: flex-start;
   gap: 0.35rem;
+  align-self: stretch;
 }
 
 .brand-logo {
-  width: 96px;
-  height: auto;
+  height: 100%;
+  width: auto;
+  min-width: 96px;
   filter: drop-shadow(0 10px 20px rgba(var(--brand-primary-rgb), 0.12));
   cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .brand-logo {
+    min-width: 72px;
+  }
 }
 
 .brand-text h1 {
@@ -700,6 +708,32 @@ body.theme-dark table {
 .guide-list li {
   font-size: 0.98rem;
   line-height: 1.5;
+}
+
+.guide-list__title {
+  display: block;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.guide-list__details {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--text-secondary);
+}
+
+.guide-sublist {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.guide-sublist li {
+  line-height: 1.45;
 }
 
 .support-grid {

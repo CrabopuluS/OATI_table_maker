@@ -15,7 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="app.js" type="module" defer></script>
 </head>
-<body class="theme-light">
+<body class="theme-dark" data-theme="dark">
   <div class="app-background" aria-hidden="true">
     <span class="app-background__orb app-background__orb--primary"></span>
     <span class="app-background__orb app-background__orb--accent"></span>
@@ -32,11 +32,11 @@
           </div>
         </div>
         <div class="header-actions">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="true">
             <span class="theme-toggle__glow" aria-hidden="true"></span>
             <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true"></span>
             <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true"></span>
-            <span class="theme-toggle__label" id="theme-toggle-text">Темный режим</span>
+            <span class="theme-toggle__label" id="theme-toggle-text">Светлый режим</span>
           </button>
         </div>
       </div>
@@ -86,11 +86,56 @@
           <p class="card__subtitle">Перед началом убедитесь, что исходные таблицы соответствуют методике из «Правил формирования данных».</p>
         </div>
         <ol class="guide-list">
-          <li><strong>Формат файлов.</strong> Поддерживаются книги Excel (.xlsx, .xls). Каждая книга должна содержать единственный лист с заголовками.</li>
-          <li><strong>Столбцы.</strong> Первые строки должны содержать понятные заголовки. Чем точнее названия, тем выше вероятность автоматического сопоставления.</li>
-          <li><strong>Единый словарь.</strong> Типы объектов и нарушения должны быть названы одинаково в обоих файлах — это влияет на корректность фильтров.</li>
-          <li><strong>Даты.</strong> Даты обследований допускаются в виде значений Excel или строк формата «дд.мм.гггг».</li>
-          <li><strong>Безопасность.</strong> Обработка выполняется только в браузере, файлы никуда не загружаются.</li>
+          <li>
+            <span class="guide-list__title">Подготовьте исходные Excel-файлы</span>
+            <span class="guide-list__details">
+              Приложение принимает выгрузки форматов <code>.xlsx</code> и <code>.xls</code> с единственным листом, где первая строка — заголовки без объединений.
+            </span>
+            <ul class="guide-sublist">
+              <li>В таблице нарушений должны быть дата обследования, статус и наименование нарушения.</li>
+              <li>В справочнике объектов рекомендуется указывать <abbr title="уникальный идентификатор">ID</abbr>, название и округ.</li>
+            </ul>
+          </li>
+          <li>
+            <span class="guide-list__title">Загрузите выгрузки и дождитесь обработки</span>
+            <span class="guide-list__details">
+              После выбора файла индикатор прогресса покажет ход чтения. Данные обрабатываются локально в браузере.
+            </span>
+            <ul class="guide-sublist">
+              <li>Приложение автоматически определяет строку заголовков и типы столбцов.</li>
+              <li>Ошибки парсинга отображаются в области предпросмотра.</li>
+            </ul>
+          </li>
+          <li>
+            <span class="guide-list__title">Проверьте сопоставление столбцов</span>
+            <span class="guide-list__details">
+              Секция «Настройка соответствия» предлагает автоматически подобранные поля. Их можно скорректировать вручную.
+            </span>
+            <ul class="guide-sublist">
+              <li>Для уникальной идентификации используются ID объектов или нормализованные названия.</li>
+              <li>Дополнительные столбцы, такие как источник данных, подключаются по мере наличия.</li>
+            </ul>
+          </li>
+          <li>
+            <span class="guide-list__title">Настройте фильтры отчёта</span>
+            <span class="guide-list__details">
+              Доступны выбор периодов, типы объектов и нарушений, фильтр по источнику и объединение округов ТиНАО.
+            </span>
+            <ul class="guide-sublist">
+              <li>Пользовательские списки типов и нарушений ограничивают расчёт только выбранными значениями.</li>
+              <li>При включении объединения округа ТиНАО считаются единой строкой.</li>
+            </ul>
+          </li>
+          <li>
+            <span class="guide-list__title">Сформируйте и выгрузите результат</span>
+            <span class="guide-list__details">
+              Раздел «Предпросмотр» покажет агрегированную таблицу по округам. После пересчёта доступна выгрузка в Excel.
+            </span>
+            <ul class="guide-sublist">
+              <li>Кнопка «Пересчитать» обновляет таблицу после изменения фильтров.</li>
+              <li>Экспорт сохраняет фирменное оформление и формат чисел.</li>
+            </ul>
+          </li>
         </ol>
       </section>
 
