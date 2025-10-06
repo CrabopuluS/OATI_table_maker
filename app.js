@@ -1893,7 +1893,6 @@ function buildReport(periods) {
     const resolvedCount = entry.resolvedCount;
     const onControlCount = entry.onControlCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
-    const resolvedDisplayCount = onControlCount + previousControlCount;
 
     rows.push({
       label: entry.label,
@@ -1904,7 +1903,7 @@ function buildReport(periods) {
       totalViolations: totalViolationsCount,
       currentViolations: currentViolationsCount,
       previousControl: previousControlCount,
-      resolved: resolvedDisplayCount,
+      resolved: resolvedCount,
       onControl: onControlCount,
     });
 
@@ -1913,7 +1912,7 @@ function buildReport(periods) {
     totals.objectsWithDetectedViolations += objectsWithDetectedViolationsCount;
     totals.currentViolations += currentViolationsCount;
     totals.previousControl += previousControlCount;
-    totals.resolved += resolvedDisplayCount;
+    totals.resolved += resolvedCount;
     totals.onControl += onControlCount;
     totals.totalViolations += totalViolationsCount;
   }
