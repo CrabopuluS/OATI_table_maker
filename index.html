@@ -15,7 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="app.js" type="module" defer></script>
 </head>
-<body class="theme-dark" data-theme="dark">
+<body class="theme-light">
   <div class="app-background" aria-hidden="true">
     <span class="app-background__orb app-background__orb--primary"></span>
     <span class="app-background__orb app-background__orb--accent"></span>
@@ -32,11 +32,11 @@
           </div>
         </div>
         <div class="header-actions">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="true">
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
             <span class="theme-toggle__glow" aria-hidden="true"></span>
             <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true"></span>
             <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true"></span>
-            <span class="theme-toggle__label" id="theme-toggle-text">Светлый режим</span>
+            <span class="theme-toggle__label" id="theme-toggle-text">Темный режим</span>
           </button>
         </div>
       </div>
@@ -83,40 +83,14 @@
       <section class="card card--guide" aria-labelledby="quick-guide-title">
         <div class="card__header">
           <h2 id="quick-guide-title">Быстрый навигатор</h2>
-          <p class="card__subtitle">Проверьте подготовку данных и вспомните шаги, которые приведут к готовому отчёту за пару минут.</p>
+          <p class="card__subtitle">Перед началом убедитесь, что исходные таблицы соответствуют методике из «Правил формирования данных».</p>
         </div>
         <ol class="guide-list">
-          <li>
-            <strong>Подготовьте Excel-файлы.</strong>
-            <ul>
-              <li>Используйте по одному листу в каждой книге. Первая строка — заголовки без объединений и служебных строк.</li>
-              <li>Для надёжного сопоставления колонок укажите ID объектов и их наименования в обоих файлах.</li>
-              <li>Столбцы со статусами и источниками данных приведите к единому словарю (ОАТИ, ЦАФАП, «снят с контроля» и т.д.).</li>
-              <li>Допустимые форматы дат: стандартное значение Excel, «дд.мм.гггг» и ISO `yyyy-mm-dd`.</li>
-            </ul>
-          </li>
-          <li>
-            <strong>Загрузите и проверьте сопоставление.</strong>
-            <ul>
-              <li>Выберите файл с нарушениями и файл с объектами — индикаторы рядом покажут ход чтения.</li>
-              <li>Проверьте автоматически подобранные поля. При необходимости исправьте выбор вручную для каждого обязательного поля.</li>
-            </ul>
-          </li>
-          <li>
-            <strong>Настройте параметры отчёта.</strong>
-            <ul>
-              <li>Выберите отчётный и предыдущий периоды через календарь с доступными датами.</li>
-              <li>Отфильтруйте до трёх типов объектов и до пяти нарушений, если нужен точечный анализ.</li>
-              <li>Выберите источник данных (ОАТИ, ЦАФАП или оба) и при необходимости объедините показатели НАО и ТАО в «ТиНАО».</li>
-            </ul>
-          </li>
-          <li>
-            <strong>Проверьте результат и выгрузите отчёт.</strong>
-            <ul>
-              <li>В разделе «Предпросмотр» автоматически формируется таблица с агрегированными показателями по округам.</li>
-              <li>Используйте кнопку «Пересчитать», чтобы обновить расчёты после изменений, и «Выгрузить в Excel», когда отчёт готов.</li>
-            </ul>
-          </li>
+          <li><strong>Формат файлов.</strong> Поддерживаются книги Excel (.xlsx, .xls). Каждая книга должна содержать единственный лист с заголовками.</li>
+          <li><strong>Столбцы.</strong> Первые строки должны содержать понятные заголовки. Чем точнее названия, тем выше вероятность автоматического сопоставления.</li>
+          <li><strong>Единый словарь.</strong> Типы объектов и нарушения должны быть названы одинаково в обоих файлах — это влияет на корректность фильтров.</li>
+          <li><strong>Даты.</strong> Даты обследований допускаются в виде значений Excel или строк формата «дд.мм.гггг».</li>
+          <li><strong>Безопасность.</strong> Обработка выполняется только в браузере, файлы никуда не загружаются.</li>
         </ol>
       </section>
 
