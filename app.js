@@ -575,7 +575,10 @@ function resolveInitialTheme() {
   if (stored) {
     return stored;
   }
-  return 'dark';
+  if (themeMediaQuery?.matches) {
+    return 'dark';
+  }
+  return 'light';
 }
 
 function applyTheme(theme, { persist = false } = {}) {
