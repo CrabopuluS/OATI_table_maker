@@ -1746,10 +1746,10 @@ function buildReport(periods) {
         totalObjects: new Set(),
         inspectedObjects: new Set(),
         objectsWithDetectedViolations: new Set(),
-        currentViolationIds: new Set(),
-        previousControlIds: new Set(),
-        resolvedIds: new Set(),
-        controlIds: new Set(),
+        currentViolationsCount: 0,
+        previousControlCount: 0,
+        resolvedCount: 0,
+        onControlCount: 0,
       });
     } else {
       const entry = districtData.get(aggregatedKey);
@@ -1824,7 +1824,6 @@ function buildReport(periods) {
     }
     const districtLabel = getValueAsString(record[violationMapping.district]);
     const objectName = getValueAsString(record[violationMapping.objectName]);
-    const violationId = getValueAsString(record[violationMapping.id]);
     const status = getValueAsString(record[violationMapping.status]);
     const violationName = getValueAsString(record[violationMapping.violationName]);
     if (violationName && !violationPredicate(violationName)) {
@@ -1856,21 +1855,18 @@ function buildReport(periods) {
       ) {
         entry.objectsWithDetectedViolations.add(objectName);
       }
-      if (violationId) {
-        entry.currentViolationIds.add(violationId);
-      }
-      if (normalizedStatus === RESOLVED_STATUS && violationId) {
-        entry.resolvedIds.add(violationId);
-      }
-      if (violationId && CONTROL_STATUS_SET.has(normalizedStatus)) {
-        entry.controlIds.add(violationId);
+      if (violationName) {
+        entry.currentViolationsCount += 1;
+        if (normalizedStatus === RESOLVED_STATUS) {
+          entry.resolvedCount += 1;
+        } else {
+          entry.onControlCount += 1;
+        }
       }
     }
     if (isWithinPeriod(inspectionDate, periods.previous)) {
-      if (CONTROL_STATUS_SET.has(normalizedStatus)) {
-        if (violationId) {
-          entry.previousControlIds.add(violationId);
-        }
+      if (violationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
+        entry.previousControlCount += 1;
       }
     }
   }
@@ -1880,11 +1876,11 @@ function buildReport(periods) {
     totalObjects: 0,
     inspectedObjects: 0,
     objectsWithDetectedViolations: 0,
-    totalViolations: new Set(),
-    currentViolations: new Set(),
-    previousControl: new Set(),
-    resolved: new Set(),
-    onControl: new Set(),
+    totalViolations: 0,
+    currentViolations: 0,
+    previousControl: 0,
+    resolved: 0,
+    onControl: 0,
   };
 
   const sortedEntries = Array.from(districtData.values()).sort((a, b) => a.label.localeCompare(b.label, 'ru'));
@@ -1892,12 +1888,11 @@ function buildReport(periods) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
     const objectsWithDetectedViolationsCount = entry.objectsWithDetectedViolations.size;
-    const currentViolationsCount = entry.currentViolationIds.size;
-    const previousControlCount = entry.previousControlIds.size;
-    const resolvedCount = entry.resolvedIds.size;
-    const onControlCount = entry.controlIds.size;
-    // Нарушения «всего» считаю как объединение текущих и переходящих на контроль.
-    const totalViolationsCount = new Set([...entry.currentViolationIds, ...entry.previousControlIds]).size;
+    const currentViolationsCount = entry.currentViolationsCount;
+    const previousControlCount = entry.previousControlCount;
+    const resolvedCount = entry.resolvedCount;
+    const onControlCount = entry.onControlCount;
+    const totalViolationsCount = currentViolationsCount + previousControlCount;
 
     rows.push({
       label: entry.label,
@@ -1915,24 +1910,11 @@ function buildReport(periods) {
     totals.totalObjects += totalObjectsCount;
     totals.inspectedObjects += inspectedCount;
     totals.objectsWithDetectedViolations += objectsWithDetectedViolationsCount;
-    for (const id of entry.currentViolationIds) {
-      totals.currentViolations.add(id);
-    }
-    for (const id of entry.previousControlIds) {
-      totals.previousControl.add(id);
-    }
-    for (const id of entry.resolvedIds) {
-      totals.resolved.add(id);
-    }
-    for (const id of entry.controlIds) {
-      totals.onControl.add(id);
-    }
-    for (const id of entry.currentViolationIds) {
-      totals.totalViolations.add(id);
-    }
-    for (const id of entry.previousControlIds) {
-      totals.totalViolations.add(id);
-    }
+    totals.currentViolations += currentViolationsCount;
+    totals.previousControl += previousControlCount;
+    totals.resolved += resolvedCount;
+    totals.onControl += onControlCount;
+    totals.totalViolations += totalViolationsCount;
   }
 
   const totalRow = {
@@ -1941,11 +1923,11 @@ function buildReport(periods) {
     inspectedObjects: totals.inspectedObjects,
     inspectedPercent: computePercent(totals.inspectedObjects, totals.totalObjects),
     violationPercent: computePercent(totals.objectsWithDetectedViolations, totals.inspectedObjects),
-    totalViolations: totals.totalViolations.size,
-    currentViolations: totals.currentViolations.size,
-    previousControl: totals.previousControl.size,
-    resolved: totals.resolved.size,
-    onControl: totals.onControl.size,
+    totalViolations: totals.totalViolations,
+    currentViolations: totals.currentViolations,
+    previousControl: totals.previousControl,
+    resolved: totals.resolved,
+    onControl: totals.onControl,
   };
 
   return { rows, totalRow };
@@ -2086,6 +2068,26 @@ function buildExcelHeaderNumbers(columnCount) {
     extended.push(String(index + 1));
   }
   return extended;
+}
+
+function buildViolationSelectionDescription() {
+  if (state.violationMode === 'custom' && state.customViolations.length) {
+    const seen = new Set();
+    const names = [];
+    for (const value of state.customViolations) {
+      const text = getValueAsString(value);
+      const key = normalizeKey(text);
+      if (!key || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      names.push(text);
+    }
+    if (names.length) {
+      return `Наименования нарушений: ${names.join(', ')}`;
+    }
+  }
+  return 'Наименования нарушений: все (фильтр не применялся).';
 }
 
 /**
@@ -2475,6 +2477,7 @@ function exportReportToExcel(report, periods) {
     const columnCount = headers.length;
     const headerNumbers = buildExcelHeaderNumbers(columnCount);
     const title = buildExcelTitle(periods);
+    const violationDescription = buildViolationSelectionDescription();
 
     const createEmptyRow = () => Array.from({ length: columnCount }, () => null);
     const aoa = [];
@@ -2482,6 +2485,11 @@ function exportReportToExcel(report, periods) {
     aoa.push(createEmptyRow());
     const titleRowIndex = aoa.length;
     aoa.push([title, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
+    let descriptionRowIndex = null;
+    if (violationDescription) {
+      descriptionRowIndex = aoa.length;
+      aoa.push([violationDescription, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
+    }
     aoa.push(createEmptyRow());
     const headerRowIndex = aoa.length;
     aoa.push(headers);
@@ -2497,9 +2505,13 @@ function exportReportToExcel(report, periods) {
     const lastDataRowIndex = aoa.length - 1;
 
     const sheet = XLSX.utils.aoa_to_sheet(aoa);
-    sheet['!merges'] = [
+    const merges = [
       { s: { r: titleRowIndex, c: 0 }, e: { r: titleRowIndex, c: columnCount - 1 } },
     ];
+    if (descriptionRowIndex !== null) {
+      merges.push({ s: { r: descriptionRowIndex, c: 0 }, e: { r: descriptionRowIndex, c: columnCount - 1 } });
+    }
+    sheet['!merges'] = merges;
 
     const baseColumnWidths = [26, 16, 22, 28, 22, 20, 34, 34, 24, 24];
     sheet['!cols'] = Array.from({ length: columnCount }, (_, index) => ({
@@ -2508,6 +2520,9 @@ function exportReportToExcel(report, periods) {
 
     sheet['!rows'] = sheet['!rows'] ?? [];
     sheet['!rows'][titleRowIndex] = { hpt: 26 };
+    if (descriptionRowIndex !== null) {
+      sheet['!rows'][descriptionRowIndex] = { hpt: 20 };
+    }
     sheet['!rows'][headerRowIndex] = { hpt: 48 };
     sheet['!rows'][numberRowIndex] = { hpt: 22 };
     sheet['!rows'][dataStartRow] = { hpt: 24 };
@@ -2518,6 +2533,12 @@ function exportReportToExcel(report, periods) {
       font: { ...baseFont, bold: true, sz: 14 },
       alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
       fill: { fgColor: { rgb: 'FFE2E8F0' } },
+      border: buildBorderStyle(borderColor),
+    };
+    const descriptionStyle = {
+      font: { ...baseFont, sz: 11 },
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      fill: { fgColor: { rgb: 'FFF8FAFC' } },
       border: buildBorderStyle(borderColor),
     };
     const headerStyle = {
@@ -2552,6 +2573,9 @@ function exportReportToExcel(report, periods) {
 
     for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
       setCellStyle(sheet, titleRowIndex, colIndex, titleStyle);
+      if (descriptionRowIndex !== null) {
+        setCellStyle(sheet, descriptionRowIndex, colIndex, descriptionStyle);
+      }
       setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);
       setCellStyle(sheet, numberRowIndex, colIndex, numberingStyle);
     }
