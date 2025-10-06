@@ -1984,30 +1984,27 @@ function buildReport(periods) {
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(objectIdentifierCandidates);
     const objectIdIdentifier = getIdentifierByPrefix(objectIdentifierCandidates, 'id:');
+    const nameIdentifier = getIdentifierByPrefix(objectIdentifierCandidates, 'name:');
     const fallbackObjectIdentifier =
-      objectIdIdentifier ||
-      (normalizedObjectName ? `name:${normalizedObjectName}` : '') ||
-      primaryObjectIdentifier;
+      objectIdIdentifier || nameIdentifier || primaryObjectIdentifier;
     const resolvedObjectType = resolveObjectType(
       objectIdIdentifier || primaryObjectIdentifier,
       objectIdentifierCandidates,
       fallbackObjectIdentifier,
     );
-    if (objectIdIdentifier) {
-      entry.totalObjects.add(objectIdIdentifier);
-    } else if (fallbackObjectIdentifier && fallbackObjectIdentifier.startsWith('name:')) {
-      entry.totalObjectsFallback.add(fallbackObjectIdentifier);
+    const typeAllowed =
+      state.typeMode === 'custom'
+        ? Boolean(resolvedObjectType) && typePredicate(resolvedObjectType)
+        : typePredicate(resolvedObjectType);
+
+    if (!typeAllowed) {
+      continue;
     }
 
-    if (state.typeMode === 'custom') {
-      if (!resolvedObjectType) {
-        continue;
-      }
-      if (!typePredicate(resolvedObjectType)) {
-        continue;
-      }
-    } else if (resolvedObjectType && !typePredicate(resolvedObjectType)) {
-      continue;
+    if (objectIdIdentifier) {
+      entry.totalObjects.add(objectIdIdentifier);
+    } else if (nameIdentifier) {
+      entry.totalObjectsFallback.add(nameIdentifier);
     }
 
     const inspectedIdentifier = fallbackObjectIdentifier;
@@ -2231,7 +2228,8 @@ function createCell(value, isHeader = false) {
 // Формирую заголовки таблицы, включая динамический текст по выбранному периоду.
 function buildTableHeaders(periods) {
   const totalHeader = buildTotalHeader();
-  const rangeHeader = `Проверено ОДХ с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
+  const rangeHeader =
+    `Проверено объектов контроля с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
   return [
     'Округ',
     totalHeader,
