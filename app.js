@@ -1811,6 +1811,18 @@ function getPrimaryObjectIdentifier(candidates) {
   return candidates.length ? candidates[0] : '';
 }
 
+function getIdentifierByPrefix(candidates, prefix) {
+  if (!Array.isArray(candidates)) {
+    return '';
+  }
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.startsWith(prefix)) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
 /**
  * Строит отчёт по округам на основании выбранных фильтров и периодов.
  *
@@ -1880,6 +1892,7 @@ function buildReport(periods) {
       districtData.set(aggregatedKey, {
         label: displayLabel,
         totalObjects: new Set(),
+        totalObjectsFallback: new Set(),
         inspectedObjects: new Set(),
         objectsWithDetectedViolations: new Set(),
         currentViolationsCount: 0,
@@ -1917,11 +1930,17 @@ function buildReport(periods) {
     );
     registerObjectType(identifierCandidates, typeValue);
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
-    if (!primaryObjectIdentifier) {
+    const nameIdentifier = getIdentifierByPrefix(identifierCandidates, 'name:');
+    const idIdentifier = getIdentifierByPrefix(identifierCandidates, 'id:');
+    if (!primaryObjectIdentifier && !nameIdentifier) {
       continue;
     }
     const entry = ensureEntry(districtLabel);
-    entry.totalObjects.add(primaryObjectIdentifier);
+    if (idIdentifier) {
+      entry.totalObjects.add(idIdentifier);
+    } else if (nameIdentifier) {
+      entry.totalObjectsFallback.add(nameIdentifier);
+    }
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
@@ -1961,12 +1980,22 @@ function buildReport(periods) {
       violationMapping.objectName ? record[violationMapping.objectName] : '',
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(objectIdentifierCandidates);
-    const fallbackObjectIdentifier = primaryObjectIdentifier || (normalizedObjectName ? `name:${normalizedObjectName}` : '');
+    const objectIdIdentifier = getIdentifierByPrefix(objectIdentifierCandidates, 'id:');
+    const fallbackObjectIdentifier =
+      objectIdIdentifier ||
+      (normalizedObjectName ? `name:${normalizedObjectName}` : '') ||
+      primaryObjectIdentifier;
     const resolvedObjectType = resolveObjectType(
-      primaryObjectIdentifier,
+      objectIdIdentifier || primaryObjectIdentifier,
       objectIdentifierCandidates,
       fallbackObjectIdentifier,
     );
+    if (objectIdIdentifier) {
+      entry.totalObjects.add(objectIdIdentifier);
+    } else if (fallbackObjectIdentifier && fallbackObjectIdentifier.startsWith('name:')) {
+      entry.totalObjectsFallback.add(fallbackObjectIdentifier);
+    }
+
     if (state.typeMode === 'custom') {
       if (!resolvedObjectType) {
         continue;
@@ -1978,17 +2007,19 @@ function buildReport(periods) {
       continue;
     }
 
+    const inspectedIdentifier = fallbackObjectIdentifier;
+
     if (isWithinPeriod(inspectionDate, periods.current)) {
-      if (fallbackObjectIdentifier) {
-        entry.inspectedObjects.add(fallbackObjectIdentifier);
+      if (inspectedIdentifier) {
+        entry.inspectedObjects.add(inspectedIdentifier);
       }
       if (
         violationFilterPassed &&
         inspectionResultColumn &&
-        fallbackObjectIdentifier &&
+        inspectedIdentifier &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
-        entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
+        entry.objectsWithDetectedViolations.add(inspectedIdentifier);
       }
       if (
         violationFilterPassed &&
@@ -2030,7 +2061,7 @@ function buildReport(periods) {
 
   const sortedEntries = Array.from(districtData.values()).sort(compareDistrictEntries);
   for (const entry of sortedEntries) {
-    const totalObjectsCount = entry.totalObjects.size;
+    const totalObjectsCount = entry.totalObjects.size + entry.totalObjectsFallback.size;
     const inspectedCount = entry.inspectedObjects.size;
     const objectsWithDetectedViolationsCount = entry.objectsWithDetectedViolations.size;
     const currentViolationsCount = entry.currentViolationsCount;
@@ -2039,6 +2070,19 @@ function buildReport(periods) {
     const currentControlStatusesCount = entry.currentControlStatusesCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
     const onControlTotal = previousControlCount + currentControlStatusesCount;
+
+    const hasAnyData =
+      totalObjectsCount ||
+      inspectedCount ||
+      objectsWithDetectedViolationsCount ||
+      currentViolationsCount ||
+      previousControlCount ||
+      resolvedCount ||
+      currentControlStatusesCount;
+
+    if (!hasAnyData) {
+      continue;
+    }
 
     rows.push({
       label: entry.label,
@@ -2189,7 +2233,7 @@ function buildTableHeaders(periods) {
     'Округ',
     totalHeader,
     rangeHeader,
-    '% проверенных объектов от общего количества ОДХ',
+    '% проверенных объектов от общего количества объектов',
     '% объектов с нарушениями',
     'Всего нарушений',
     'Нарушения, выявленные за отчётный период',
