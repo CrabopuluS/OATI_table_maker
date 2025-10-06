@@ -1786,14 +1786,14 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 function buildObjectIdentifierCandidates(idValue, nameValue, externalIdValue = '') {
   const candidates = [];
-  const normalizedExternalId = normalizeKey(getValueAsString(externalIdValue));
-  if (normalizedExternalId) {
-    candidates.push(`external:${normalizedExternalId}`);
-  }
   const normalizedId = normalizeKey(getValueAsString(idValue));
+  const normalizedExternalId = normalizeKey(getValueAsString(externalIdValue));
   const normalizedName = normalizeKey(getValueAsString(nameValue));
   if (normalizedId) {
     candidates.push(`id:${normalizedId}`);
+  }
+  if (normalizedExternalId) {
+    candidates.push(`external:${normalizedExternalId}`);
   }
   if (normalizedName) {
     candidates.push(`name:${normalizedName}`);
@@ -1814,18 +1814,6 @@ function getPrimaryObjectIdentifier(candidates) {
   return candidates.length ? candidates[0] : '';
 }
 
-function getIdentifierByPrefix(candidates, prefix) {
-  if (!Array.isArray(candidates)) {
-    return '';
-  }
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.startsWith(prefix)) {
-      return candidate;
-    }
-  }
-  return '';
-}
-
 /**
  * Строит отчёт по округам на основании выбранных фильтров и периодов.
  *
@@ -1841,38 +1829,6 @@ function buildReport(periods) {
   const dataSourcePredicate = createDataSourcePredicate();
   // Здесь буду копить агрегированные данные по округам.
   const districtData = new Map();
-  const objectTypeByIdentifier = new Map();
-  const registerObjectType = (candidates, typeValue) => {
-    const typeText = getValueAsString(typeValue);
-    if (!typeText) {
-      return;
-    }
-    for (const candidate of candidates) {
-      if (candidate && !objectTypeByIdentifier.has(candidate)) {
-        objectTypeByIdentifier.set(candidate, typeText);
-      }
-    }
-  };
-  const resolveObjectType = (primaryIdentifier, candidates, fallbackIdentifier) => {
-    const keysToCheck = [];
-    if (primaryIdentifier) {
-      keysToCheck.push(primaryIdentifier);
-    }
-    for (const candidate of candidates) {
-      if (candidate) {
-        keysToCheck.push(candidate);
-      }
-    }
-    if (fallbackIdentifier) {
-      keysToCheck.push(fallbackIdentifier);
-    }
-    for (const key of keysToCheck) {
-      if (objectTypeByIdentifier.has(key)) {
-        return objectTypeByIdentifier.get(key);
-      }
-    }
-    return '';
-  };
   const combineTiNao = state.combineTiNaoDistricts;
   const districtLookup = buildDistrictLookup(
     state.objects,
@@ -1895,7 +1851,6 @@ function buildReport(periods) {
       districtData.set(aggregatedKey, {
         label: displayLabel,
         totalObjects: new Set(),
-        totalObjectsFallback: new Set(),
         inspectedObjects: new Set(),
         objectsWithDetectedViolations: new Set(),
         currentViolationsCount: 0,
@@ -1912,9 +1867,40 @@ function buildReport(periods) {
     return districtData.get(aggregatedKey);
   };
 
+  const allowedViolationObjects = new Set();
+  const violationObjectIdColumn = violationMapping.objectId;
+  if (state.violationMode === 'custom' && state.customViolations.length) {
+    const violationNameColumn = violationMapping.violationName;
+    const violationObjectNameColumn = violationMapping.objectName;
+    if (violationNameColumn && (violationObjectNameColumn || violationObjectIdColumn)) {
+      for (const record of state.violations) {
+        if (!dataSourcePredicate(record)) {
+          continue;
+        }
+        const statusValue = getValueAsString(record[violationMapping.status]);
+        if (normalizeText(statusValue) === DRAFT_STATUS) {
+          continue;
+        }
+        const violationName = getValueAsString(record[violationNameColumn]);
+        if (!violationName || !violationPredicate(violationName)) {
+          continue;
+        }
+        const identifierCandidates = buildObjectIdentifierCandidates(
+          violationObjectIdColumn ? record[violationObjectIdColumn] : '',
+          violationObjectNameColumn ? record[violationObjectNameColumn] : '',
+        );
+        if (!identifierCandidates.length) {
+          continue;
+        }
+        for (const candidate of identifierCandidates) {
+          allowedViolationObjects.add(candidate);
+        }
+      }
+    }
+  }
+
   const objectIdColumn = objectMapping.objectId;
   const externalObjectIdColumn = objectMapping.externalObjectId;
-  const violationObjectIdColumn = violationMapping.objectId;
 
   // Сначала прохожусь по объектам и считаю общее количество по округам.
   for (const record of state.objects) {
@@ -1931,19 +1917,23 @@ function buildReport(periods) {
       objectMapping.objectName ? record[objectMapping.objectName] : '',
       externalObjectIdColumn ? record[externalObjectIdColumn] : '',
     );
-    registerObjectType(identifierCandidates, typeValue);
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
-    const nameIdentifier = getIdentifierByPrefix(identifierCandidates, 'name:');
-    const idIdentifier = getIdentifierByPrefix(identifierCandidates, 'id:');
-    if (!primaryObjectIdentifier && !nameIdentifier) {
+    if (!primaryObjectIdentifier) {
       continue;
     }
-    const entry = ensureEntry(districtLabel);
-    if (idIdentifier) {
-      entry.totalObjects.add(idIdentifier);
-    } else if (nameIdentifier) {
-      entry.totalObjectsFallback.add(nameIdentifier);
+    if (state.violationMode === 'custom') {
+      if (!allowedViolationObjects.size) {
+        continue;
+      }
+      const matchesAllowed = identifierCandidates.some((candidate) =>
+        allowedViolationObjects.has(candidate),
+      );
+      if (!matchesAllowed) {
+        continue;
+      }
     }
+    const entry = ensureEntry(districtLabel);
+    entry.totalObjects.add(primaryObjectIdentifier);
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
@@ -1953,16 +1943,25 @@ function buildReport(periods) {
     if (!dataSourcePredicate(record)) {
       continue;
     }
+    const typeValue = getValueAsString(record[violationMapping.objectType]);
+    if (typeValue && !typePredicate(typeValue)) {
+      continue;
+    }
+    if (!typeValue && state.typeMode === 'custom') {
+      continue;
+    }
     const districtLabel = getValueAsString(record[violationMapping.district]);
     const objectName = getValueAsString(record[violationMapping.objectName]);
     const status = getValueAsString(record[violationMapping.status]);
     const violationName = getValueAsString(record[violationMapping.violationName]);
     const normalizedViolationName = normalizeKey(violationName);
     const hasViolationName = Boolean(normalizedViolationName);
-    const violationFilterPassed =
-      state.violationMode === 'custom'
-        ? hasViolationName && violationPredicate(violationName)
-        : true;
+    if (hasViolationName && !violationPredicate(violationName)) {
+      continue;
+    }
+    if (!hasViolationName && state.violationMode === 'custom') {
+      continue;
+    }
     const normalizedStatus = normalizeText(status);
     if (normalizedStatus === DRAFT_STATUS) {
       continue;
@@ -1983,65 +1982,35 @@ function buildReport(periods) {
       violationMapping.objectName ? record[violationMapping.objectName] : '',
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(objectIdentifierCandidates);
-    const objectIdIdentifier = getIdentifierByPrefix(objectIdentifierCandidates, 'id:');
-    const nameIdentifier = getIdentifierByPrefix(objectIdentifierCandidates, 'name:');
-    const fallbackObjectIdentifier =
-      objectIdIdentifier || nameIdentifier || primaryObjectIdentifier;
-    const resolvedObjectType = resolveObjectType(
-      objectIdIdentifier || primaryObjectIdentifier,
-      objectIdentifierCandidates,
-      fallbackObjectIdentifier,
-    );
-    const typeAllowed =
-      state.typeMode === 'custom'
-        ? Boolean(resolvedObjectType) && typePredicate(resolvedObjectType)
-        : typePredicate(resolvedObjectType);
-
-    if (!typeAllowed) {
-      continue;
-    }
-
-    if (objectIdIdentifier) {
-      entry.totalObjects.add(objectIdIdentifier);
-    } else if (nameIdentifier) {
-      entry.totalObjectsFallback.add(nameIdentifier);
-    }
-
-    const inspectedIdentifier = fallbackObjectIdentifier;
+    const fallbackObjectIdentifier = primaryObjectIdentifier || (normalizedObjectName ? `name:${normalizedObjectName}` : '');
 
     if (isWithinPeriod(inspectionDate, periods.current)) {
-      if (inspectedIdentifier) {
-        entry.inspectedObjects.add(inspectedIdentifier);
+      if (fallbackObjectIdentifier) {
+        entry.inspectedObjects.add(fallbackObjectIdentifier);
       }
       if (
-        violationFilterPassed &&
         inspectionResultColumn &&
-        inspectedIdentifier &&
+        fallbackObjectIdentifier &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
-        entry.objectsWithDetectedViolations.add(inspectedIdentifier);
+        entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
       }
       if (
-        violationFilterPassed &&
         hasViolationName &&
         inspectionResultColumn &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
         entry.currentViolationsCount += 1;
       }
-      if (violationFilterPassed && hasViolationName && normalizedStatus === RESOLVED_STATUS) {
+      if (hasViolationName && normalizedStatus === RESOLVED_STATUS) {
         entry.resolvedCount += 1;
       }
-      if (
-        violationFilterPassed &&
-        hasViolationName &&
-        CURRENT_CONTROL_STATUS_SET.has(normalizedStatus)
-      ) {
+      if (hasViolationName && CURRENT_CONTROL_STATUS_SET.has(normalizedStatus)) {
         entry.currentControlStatusesCount += 1;
       }
     }
     if (isWithinPeriod(inspectionDate, periods.previous)) {
-      if (violationFilterPassed && hasViolationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
+      if (hasViolationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
         entry.previousControlCount += 1;
       }
     }
@@ -2061,7 +2030,7 @@ function buildReport(periods) {
 
   const sortedEntries = Array.from(districtData.values()).sort(compareDistrictEntries);
   for (const entry of sortedEntries) {
-    const totalObjectsCount = entry.totalObjects.size + entry.totalObjectsFallback.size;
+    const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
     const objectsWithDetectedViolationsCount = entry.objectsWithDetectedViolations.size;
     const currentViolationsCount = entry.currentViolationsCount;
@@ -2070,19 +2039,6 @@ function buildReport(periods) {
     const currentControlStatusesCount = entry.currentControlStatusesCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
     const onControlTotal = previousControlCount + currentControlStatusesCount;
-
-    const hasAnyData =
-      totalObjectsCount ||
-      inspectedCount ||
-      objectsWithDetectedViolationsCount ||
-      currentViolationsCount ||
-      previousControlCount ||
-      resolvedCount ||
-      currentControlStatusesCount;
-
-    if (!hasAnyData) {
-      continue;
-    }
 
     rows.push({
       label: entry.label,
@@ -2228,13 +2184,12 @@ function createCell(value, isHeader = false) {
 // Формирую заголовки таблицы, включая динамический текст по выбранному периоду.
 function buildTableHeaders(periods) {
   const totalHeader = buildTotalHeader();
-  const rangeHeader =
-    `Проверено объектов контроля с ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
+  const rangeHeader = `Проверено объектов контроля с  ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
   return [
     'Округ',
     totalHeader,
     rangeHeader,
-    '% проверенных объектов от общего количества объектов',
+    '% проверенных объектов от общего количества ОДХ',
     '% объектов с нарушениями',
     'Всего нарушений',
     'Нарушения, выявленные за отчётный период',
@@ -2266,7 +2221,7 @@ function buildTableCaption(report, periods) {
  */
 function buildTotalHeader() {
   if (state.typeMode === 'all' || !state.customTypes.length) {
-    return 'Всего объектов';
+    return 'Всего ОДХ';
   }
   if (state.customTypes.length === 1) {
     return `Всего ${state.customTypes[0]}`;
