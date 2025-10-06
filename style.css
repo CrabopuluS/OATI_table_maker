@@ -1267,6 +1267,41 @@ legend {
   background: var(--brand-primary);
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: var(--inline-option-default-bg);
+  border: 1px solid var(--inline-option-default-border);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.3s ease, color 0.3s ease;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.checkbox-row:hover {
+  border-color: var(--brand-primary);
+  background: var(--inline-option-hover-bg);
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-primary);
+}
+
+.checkbox-row__text {
+  flex: 1;
+}
+
+.checkbox-row:has(input:checked) {
+  border-color: var(--brand-primary);
+  background: var(--inline-option-checked-bg);
+  color: var(--text-primary);
+}
+
 .inline-option__decor {
   position: absolute;
   inset: 0;
@@ -1528,6 +1563,12 @@ th {
 
 tbody tr:nth-child(even) {
   background: var(--table-row-alt);
+}
+
+.table-row--total th,
+.table-row--total td {
+  font-weight: 700;
+  background: var(--table-footer-bg);
 }
 
 tfoot td {

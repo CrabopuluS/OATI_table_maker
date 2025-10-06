@@ -38,6 +38,26 @@ const MOSCOW_DISTRICT_ABBREVIATION_KEYS = new Set(
 // На случай, когда в данных вообще нет округа, завожу понятный ключ.
 const DISTRICT_FALLBACK_KEY = 'без округа';
 
+const TINAO_DISPLAY_LABEL = 'ТиНАО';
+const TINAO_AGGREGATED_KEY = 'тинао';
+const TINAO_COMBINATION_KEYS = new Set([TINAO_AGGREGATED_KEY, 'нао', 'тао']);
+
+const DISTRICT_SORT_ORDER = new Map([
+  ['итого', 0],
+  ['цао', 1],
+  ['сао', 2],
+  ['свао', 3],
+  ['вао', 4],
+  ['ювао', 5],
+  ['юао', 6],
+  ['юзао', 7],
+  ['зао', 8],
+  ['сзао', 9],
+  ['зелао', 10],
+  [TINAO_AGGREGATED_KEY, 11],
+  ['без округа', 12],
+]);
+
 // Здесь расписал какие поля мы ожидаем получить из таблицы нарушений.
 const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
@@ -85,6 +105,7 @@ const state = {
   lastReport: null,
   lastPeriods: null,
   dataSourceOption: 'all',
+  combineTiNaoDistricts: false,
 };
 
 // Чтобы лишний раз не перерисовывать таблицу при серии событий, ввёл очередь на requestAnimationFrame.
@@ -112,6 +133,7 @@ const elements = {
   violationMessage: document.getElementById('violation-message'),
   dataSourceSelect: document.getElementById('data-source-filter'),
   dataSourceMessage: document.getElementById('data-source-message'),
+  combineTiNaoToggle: document.getElementById('combine-tinao'),
   previewMessage: document.getElementById('preview-message'),
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
@@ -682,6 +704,17 @@ if (elements.dataSourceSelect) {
       return;
     }
     state.dataSourceOption = target.value;
+    schedulePreviewUpdate();
+  });
+}
+
+if (elements.combineTiNaoToggle) {
+  elements.combineTiNaoToggle.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    state.combineTiNaoDistricts = target.checked;
     schedulePreviewUpdate();
   });
 }
@@ -1742,6 +1775,7 @@ function buildReport(periods) {
   const dataSourcePredicate = createDataSourcePredicate();
   // Здесь буду копить агрегированные данные по округам.
   const districtData = new Map();
+  const combineTiNao = state.combineTiNaoDistricts;
   const districtLookup = buildDistrictLookup(
     state.objects,
     objectMapping.district,
@@ -1751,8 +1785,14 @@ function buildReport(periods) {
   const ensureEntry = (label) => {
     const normalizedKey = normalizeDistrictKey(label);
     const key = normalizedKey || DISTRICT_FALLBACK_KEY;
-    const displayLabel = districtLookup.get(key) ?? (normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа');
-    const aggregatedKey = normalizeKey(displayLabel) || DISTRICT_FALLBACK_KEY;
+    let displayLabel =
+      districtLookup.get(key) ?? (normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа');
+    let aggregatedKey = normalizeKey(displayLabel) || DISTRICT_FALLBACK_KEY;
+
+    if (combineTiNao && shouldMergeWithTiNao(aggregatedKey)) {
+      aggregatedKey = TINAO_AGGREGATED_KEY;
+      displayLabel = TINAO_DISPLAY_LABEL;
+    }
     if (!districtData.has(aggregatedKey)) {
       districtData.set(aggregatedKey, {
         label: displayLabel,
@@ -1922,7 +1962,7 @@ function buildReport(periods) {
     onControl: 0,
   };
 
-  const sortedEntries = Array.from(districtData.values()).sort((a, b) => a.label.localeCompare(b.label, 'ru'));
+  const sortedEntries = Array.from(districtData.values()).sort(compareDistrictEntries);
   for (const entry of sortedEntries) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
@@ -1973,8 +2013,37 @@ function buildReport(periods) {
   return { rows, totalRow };
 }
 
+function shouldMergeWithTiNao(key) {
+  return TINAO_COMBINATION_KEYS.has(key);
+}
+
+function getDistrictSortIndex(label) {
+  const normalized = normalizeKey(label);
+  if (DISTRICT_SORT_ORDER.has(normalized)) {
+    return DISTRICT_SORT_ORDER.get(normalized);
+  }
+  if (normalized === 'нао') {
+    const baseIndex = DISTRICT_SORT_ORDER.get(TINAO_AGGREGATED_KEY);
+    return baseIndex !== undefined ? baseIndex + 0.05 : DISTRICT_SORT_ORDER.size;
+  }
+  if (normalized === 'тао') {
+    const baseIndex = DISTRICT_SORT_ORDER.get(TINAO_AGGREGATED_KEY);
+    return baseIndex !== undefined ? baseIndex + 0.1 : DISTRICT_SORT_ORDER.size;
+  }
+  return DISTRICT_SORT_ORDER.size + 1;
+}
+
+function compareDistrictEntries(a, b) {
+  const indexA = getDistrictSortIndex(a.label);
+  const indexB = getDistrictSortIndex(b.label);
+  if (indexA !== indexB) {
+    return indexA - indexB;
+  }
+  return a.label.localeCompare(b.label, 'ru');
+}
+
 /**
- * Создаёт HTML-таблицу предпросмотра, придерживаясь структуры thead/tbody/tfoot.
+ * Создаёт HTML-таблицу предпросмотра, придерживаясь структуры thead/tbody.
  * Одновременно формирует подпись таблицы с описанием диапазона и источника данных.
  *
  * @param {{rows: Array<object>, totalRow: object}} report Агрегированные строки отчёта.
@@ -2000,24 +2069,26 @@ function renderReportTable(report, periods) {
   table.append(thead);
 
   const tbody = document.createElement('tbody');
+  tbody.append(createRowElement(report.totalRow, { isTotal: true }));
   for (const row of report.rows) {
     tbody.append(createRowElement(row));
   }
   table.append(tbody);
-
-  const tfoot = document.createElement('tfoot');
-  tfoot.append(createRowElement(report.totalRow));
-  table.append(tfoot);
 }
 
 /**
  * Создаёт строку таблицы на основе агрегированной записи отчёта.
  *
  * @param {object} row Данные строки отчёта.
+ * @param {{isTotal?: boolean}} [options] Дополнительные настройки строки.
  * @returns {HTMLTableRowElement} DOM-элемент строки.
  */
-function createRowElement(row) {
+function createRowElement(row, options = {}) {
+  const { isTotal = false } = options;
   const tr = document.createElement('tr');
+  if (isTotal) {
+    tr.classList.add('table-row--total');
+  }
   tr.append(createCell(row.label, true));
   tr.append(createCell(formatInteger(row.totalObjects)));
   tr.append(createCell(formatInteger(row.inspectedObjects)));
