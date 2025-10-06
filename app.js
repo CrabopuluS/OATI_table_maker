@@ -82,6 +82,7 @@ const violationFieldDefinitions = [
 
 // Аналогичный список для справочника объектов.
 const objectFieldDefinitions = [
+  { key: 'objectId', label: 'ID объекта', candidates: ['id объекта', 'id объекта контроля', 'идентификатор объекта', 'id'] },
   { key: 'objectType', label: 'Вид объекта', candidates: ['вид объекта', 'тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
@@ -1857,52 +1858,16 @@ function buildReport(periods) {
     return districtData.get(key);
   };
 
-  const allowedViolationObjects = new Set();
-  if (state.violationMode === 'custom' && state.customViolations.length) {
-    const violationNameColumn = violationMapping.violationName;
-    const violationObjectNameColumn = violationMapping.objectName;
-    if (violationNameColumn && violationObjectNameColumn) {
-      for (const record of state.violations) {
-        if (!dataSourcePredicate(record)) {
-          continue;
-        }
-        const violationName = getValueAsString(record[violationNameColumn]);
-        if (!violationName || !violationPredicate(violationName)) {
-          continue;
-        }
-        const relatedObjectName = getValueAsString(record[violationObjectNameColumn]);
-        if (!relatedObjectName) {
-          continue;
-        }
-        allowedViolationObjects.add(normalizeKey(relatedObjectName));
-      }
-    }
-  }
-
   // Сначала прохожусь по объектам и считаю общее количество по округам.
+  const objectIdColumn = objectMapping.objectId;
   for (const record of state.objects) {
-    const typeValue = getValueAsString(record[objectMapping.objectType]);
-    if (typeValue && !typePredicate(typeValue)) {
-      continue;
-    }
-    if (!typeValue && state.typeMode === 'custom') {
-      continue;
-    }
     const districtLabel = getValueAsString(record[objectMapping.district]);
-    const objectName = getValueAsString(record[objectMapping.objectName]);
-    if (!objectName) {
+    const objectId = getValueAsString(record[objectIdColumn]);
+    if (!objectId) {
       continue;
-    }
-    if (state.violationMode === 'custom') {
-      if (!allowedViolationObjects.size) {
-        continue;
-      }
-      if (!allowedViolationObjects.has(normalizeKey(objectName))) {
-        continue;
-      }
     }
     const entry = ensureEntry(districtLabel);
-    entry.totalObjects.add(objectName);
+    entry.totalObjects.add(objectId);
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
