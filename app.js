@@ -1912,15 +1912,16 @@ function buildReport(periods) {
       continue;
     }
     const districtLabel = getValueAsString(record[objectMapping.district]);
+    const externalIdentifierValue = externalObjectIdColumn
+      ? getValueAsString(record[externalObjectIdColumn])
+      : '';
+    const normalizedExternalIdentifier = normalizeKey(externalIdentifierValue);
     const identifierCandidates = buildObjectIdentifierCandidates(
       objectIdColumn ? record[objectIdColumn] : '',
       objectMapping.objectName ? record[objectMapping.objectName] : '',
       externalObjectIdColumn ? record[externalObjectIdColumn] : '',
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
-    if (!primaryObjectIdentifier) {
-      continue;
-    }
     if (state.violationMode === 'custom') {
       if (!allowedViolationObjects.size) {
         continue;
@@ -1932,8 +1933,14 @@ function buildReport(periods) {
         continue;
       }
     }
+    const totalObjectIdentifier = normalizedExternalIdentifier
+      ? `external:${normalizedExternalIdentifier}`
+      : primaryObjectIdentifier;
+    if (!totalObjectIdentifier) {
+      continue;
+    }
     const entry = ensureEntry(districtLabel);
-    entry.totalObjects.add(primaryObjectIdentifier);
+    entry.totalObjects.add(totalObjectIdentifier);
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
@@ -2039,6 +2046,19 @@ function buildReport(periods) {
     const currentControlStatusesCount = entry.currentControlStatusesCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
     const onControlTotal = previousControlCount + currentControlStatusesCount;
+
+    const shouldSkipRow =
+      state.typeMode === 'custom' &&
+      totalObjectsCount === 0 &&
+      inspectedCount === 0 &&
+      objectsWithDetectedViolationsCount === 0 &&
+      totalViolationsCount === 0 &&
+      previousControlCount === 0 &&
+      resolvedCount === 0 &&
+      onControlTotal === 0;
+    if (shouldSkipRow) {
+      continue;
+    }
 
     rows.push({
       label: entry.label,
@@ -2189,7 +2209,7 @@ function buildTableHeaders(periods) {
     'Округ',
     totalHeader,
     rangeHeader,
-    '% проверенных объектов от общего количества ОДХ',
+    '% проверенных объектов от общего количества объектов',
     '% объектов с нарушениями',
     'Всего нарушений',
     'Нарушения, выявленные за отчётный период',
