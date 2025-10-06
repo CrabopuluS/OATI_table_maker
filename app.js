@@ -2,7 +2,15 @@
 // Такой подход сразу же подсвечивает, какие статусы и сокращения мы ожидаем в входных данных.
 const CONTROL_STATUSES = ['на устранении', 'на контроле инспектора оати'];
 const CONTROL_STATUS_SET = new Set(CONTROL_STATUSES);
+const CURRENT_CONTROL_STATUSES = [
+  'на устранении',
+  'на контроле инспектора оати',
+  'новое',
+  'ошибка передачи данных в цафап',
+];
+const CURRENT_CONTROL_STATUS_SET = new Set(CURRENT_CONTROL_STATUSES);
 const RESOLVED_STATUS = 'снят с контроля';
+const DRAFT_STATUS = 'черновик';
 const INSPECTION_RESULT_VIOLATION = 'нарушение выявлено';
 
 // Список округов и их официальных сокращений держу в одном месте, чтобы дальше не размазывать магические строки.
@@ -18,7 +26,7 @@ const MOSCOW_DISTRICT_ABBREVIATIONS = Object.freeze({
   'северо-западный административный округ': 'СЗАО',
   'зеленоградский административный округ': 'ЗелАО',
   'новомосковский административный округ': 'НАО',
-  'троицкий административный округ': 'ТАО',
+  'троицкий административный округ': 'ТиНАО',
   'троицкий и новомосковский административный округ': 'ТиНАО',
 });
 
@@ -49,6 +57,11 @@ const violationFieldDefinitions = [
 
 // Аналогичный список для справочника объектов.
 const objectFieldDefinitions = [
+  {
+    key: 'objectId',
+    label: 'ID объекта',
+    candidates: ['id объекта', 'id объекта контроля', 'id', 'ид объекта', 'идентификатор объекта'],
+  },
   { key: 'objectType', label: 'Вид объекта', candidates: ['вид объекта', 'тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
@@ -1749,7 +1762,7 @@ function buildReport(periods) {
         currentViolationsCount: 0,
         previousControlCount: 0,
         resolvedCount: 0,
-        onControlCount: 0,
+        currentControlStatusesCount: 0,
       });
     } else {
       const entry = districtData.get(aggregatedKey);
@@ -1769,6 +1782,10 @@ function buildReport(periods) {
         if (!dataSourcePredicate(record)) {
           continue;
         }
+        const statusValue = getValueAsString(record[violationMapping.status]);
+        if (normalizeText(statusValue) === DRAFT_STATUS) {
+          continue;
+        }
         const violationName = getValueAsString(record[violationNameColumn]);
         if (!violationName || !violationPredicate(violationName)) {
           continue;
@@ -1782,6 +1799,8 @@ function buildReport(periods) {
     }
   }
 
+  const objectIdColumn = objectMapping.objectId;
+
   // Сначала прохожусь по объектам и считаю общее количество по округам.
   for (const record of state.objects) {
     const typeValue = getValueAsString(record[objectMapping.objectType]);
@@ -1793,19 +1812,28 @@ function buildReport(periods) {
     }
     const districtLabel = getValueAsString(record[objectMapping.district]);
     const objectName = getValueAsString(record[objectMapping.objectName]);
-    if (!objectName) {
-      continue;
-    }
+    const normalizedObjectName = normalizeKey(objectName);
     if (state.violationMode === 'custom') {
       if (!allowedViolationObjects.size) {
         continue;
       }
-      if (!allowedViolationObjects.has(normalizeKey(objectName))) {
+      if (!normalizedObjectName || !allowedViolationObjects.has(normalizedObjectName)) {
         continue;
       }
     }
+    const objectIdValue = objectIdColumn ? getValueAsString(record[objectIdColumn]) : '';
+    const normalizedObjectId = normalizeKey(objectIdValue);
+    let objectIdentifier = '';
+    if (normalizedObjectId) {
+      objectIdentifier = `id:${normalizedObjectId}`;
+    } else if (normalizedObjectName) {
+      objectIdentifier = `name:${normalizedObjectName}`;
+    }
+    if (!objectIdentifier) {
+      continue;
+    }
     const entry = ensureEntry(districtLabel);
-    entry.totalObjects.add(objectName);
+    entry.totalObjects.add(objectIdentifier);
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
@@ -1826,13 +1854,18 @@ function buildReport(periods) {
     const objectName = getValueAsString(record[violationMapping.objectName]);
     const status = getValueAsString(record[violationMapping.status]);
     const violationName = getValueAsString(record[violationMapping.violationName]);
-    if (violationName && !violationPredicate(violationName)) {
+    const normalizedViolationName = normalizeKey(violationName);
+    const hasViolationName = Boolean(normalizedViolationName);
+    if (hasViolationName && !violationPredicate(violationName)) {
       continue;
     }
-    if (!violationName && state.violationMode === 'custom') {
+    if (!hasViolationName && state.violationMode === 'custom') {
       continue;
     }
     const normalizedStatus = normalizeText(status);
+    if (normalizedStatus === DRAFT_STATUS) {
+      continue;
+    }
     const dateValue = record[violationMapping.inspectionDate];
     const inspectionDate = parseDateValue(dateValue);
     if (!inspectionDate) {
@@ -1843,29 +1876,35 @@ function buildReport(periods) {
       ? getValueAsString(record[inspectionResultColumn])
       : '';
     const normalizedInspectionResult = normalizeText(inspectionResultValue);
+    const normalizedObjectName = normalizeKey(objectName);
 
     if (isWithinPeriod(inspectionDate, periods.current)) {
-      if (objectName) {
-        entry.inspectedObjects.add(objectName);
+      if (normalizedObjectName) {
+        entry.inspectedObjects.add(normalizedObjectName);
       }
       if (
         inspectionResultColumn &&
-        objectName &&
+        normalizedObjectName &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
-        entry.objectsWithDetectedViolations.add(objectName);
+        entry.objectsWithDetectedViolations.add(normalizedObjectName);
       }
-      if (violationName) {
+      if (
+        hasViolationName &&
+        inspectionResultColumn &&
+        normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
+      ) {
         entry.currentViolationsCount += 1;
-        if (normalizedStatus === RESOLVED_STATUS) {
-          entry.resolvedCount += 1;
-        } else {
-          entry.onControlCount += 1;
-        }
+      }
+      if (hasViolationName && normalizedStatus === RESOLVED_STATUS) {
+        entry.resolvedCount += 1;
+      }
+      if (hasViolationName && CURRENT_CONTROL_STATUS_SET.has(normalizedStatus)) {
+        entry.currentControlStatusesCount += 1;
       }
     }
     if (isWithinPeriod(inspectionDate, periods.previous)) {
-      if (violationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
+      if (hasViolationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
         entry.previousControlCount += 1;
       }
     }
@@ -1891,8 +1930,9 @@ function buildReport(periods) {
     const currentViolationsCount = entry.currentViolationsCount;
     const previousControlCount = entry.previousControlCount;
     const resolvedCount = entry.resolvedCount;
-    const onControlCount = entry.onControlCount;
+    const currentControlStatusesCount = entry.currentControlStatusesCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
+    const onControlTotal = previousControlCount + currentControlStatusesCount;
 
     rows.push({
       label: entry.label,
@@ -1904,7 +1944,7 @@ function buildReport(periods) {
       currentViolations: currentViolationsCount,
       previousControl: previousControlCount,
       resolved: resolvedCount,
-      onControl: onControlCount,
+      onControl: onControlTotal,
     });
 
     totals.totalObjects += totalObjectsCount;
@@ -1913,7 +1953,7 @@ function buildReport(periods) {
     totals.currentViolations += currentViolationsCount;
     totals.previousControl += previousControlCount;
     totals.resolved += resolvedCount;
-    totals.onControl += onControlCount;
+    totals.onControl += onControlTotal;
     totals.totalViolations += totalViolationsCount;
   }
 
