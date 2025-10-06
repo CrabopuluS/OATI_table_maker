@@ -1749,6 +1749,7 @@ function buildReport(periods) {
         currentViolationsCount: 0,
         previousControlCount: 0,
         resolvedCount: 0,
+        onControlCount: 0,
       });
     } else {
       const entry = districtData.get(aggregatedKey);
@@ -1858,6 +1859,8 @@ function buildReport(periods) {
         entry.currentViolationsCount += 1;
         if (normalizedStatus === RESOLVED_STATUS) {
           entry.resolvedCount += 1;
+        } else {
+          entry.onControlCount += 1;
         }
       }
     }
@@ -1888,10 +1891,7 @@ function buildReport(periods) {
     const currentViolationsCount = entry.currentViolationsCount;
     const previousControlCount = entry.previousControlCount;
     const resolvedCount = entry.resolvedCount;
-    const onControlCount = Math.max(
-      0,
-      currentViolationsCount - resolvedCount + previousControlCount,
-    );
+    const onControlCount = entry.onControlCount;
     const totalViolationsCount = currentViolationsCount + previousControlCount;
 
     rows.push({
