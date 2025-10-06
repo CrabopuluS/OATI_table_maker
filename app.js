@@ -94,6 +94,18 @@ const objectFieldDefinitions = [
     label: 'ID объекта',
     candidates: ['id объекта', 'id объекта контроля', 'id', 'ид объекта', 'идентификатор объекта'],
   },
+  {
+    key: 'externalObjectId',
+    label: 'Внешний идентификатор объекта',
+    candidates: [
+      'внешний идентификатор объекта',
+      'внешний id объекта',
+      'внешний идентификатор',
+      'внешний id',
+      'external object id',
+      'external id',
+    ],
+  },
   { key: 'objectType', label: 'Вид объекта', candidates: ['вид объекта', 'тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
@@ -1772,8 +1784,12 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 // Пример использования: buildDistrictLookup([{ district: 'Центральный административный округ' }], 'district', [], 'district');
 
-function buildObjectIdentifierCandidates(idValue, nameValue) {
+function buildObjectIdentifierCandidates(idValue, nameValue, externalIdValue = '') {
   const candidates = [];
+  const normalizedExternalId = normalizeKey(getValueAsString(externalIdValue));
+  if (normalizedExternalId) {
+    candidates.push(`external:${normalizedExternalId}`);
+  }
   const normalizedId = normalizeKey(getValueAsString(idValue));
   const normalizedName = normalizeKey(getValueAsString(nameValue));
   if (normalizedId) {
@@ -1884,6 +1900,7 @@ function buildReport(periods) {
   }
 
   const objectIdColumn = objectMapping.objectId;
+  const externalObjectIdColumn = objectMapping.externalObjectId;
 
   // Сначала прохожусь по объектам и считаю общее количество по округам.
   for (const record of state.objects) {
@@ -1898,6 +1915,7 @@ function buildReport(periods) {
     const identifierCandidates = buildObjectIdentifierCandidates(
       objectIdColumn ? record[objectIdColumn] : '',
       objectMapping.objectName ? record[objectMapping.objectName] : '',
+      externalObjectIdColumn ? record[externalObjectIdColumn] : '',
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
     if (!primaryObjectIdentifier) {
