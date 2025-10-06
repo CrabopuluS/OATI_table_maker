@@ -1811,6 +1811,15 @@ function getPrimaryObjectIdentifier(candidates) {
   return candidates.length ? candidates[0] : '';
 }
 
+function getPrimaryObjectIdentifierForTotals(candidates) {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.startsWith('external:')) {
+      return candidate;
+    }
+  }
+  return getPrimaryObjectIdentifier(candidates);
+}
+
 /**
  * Строит отчёт по округам на основании выбранных фильтров и периодов.
  *
@@ -1915,8 +1924,12 @@ function buildReport(periods) {
       objectMapping.objectName ? record[objectMapping.objectName] : '',
       externalObjectIdColumn ? record[externalObjectIdColumn] : '',
     );
-    registerObjectType(identifierCandidates, typeValue);
-    const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
+    const typeIdentifierCandidates = buildObjectIdentifierCandidates(
+      objectIdColumn ? record[objectIdColumn] : '',
+      objectMapping.objectName ? record[objectMapping.objectName] : '',
+    );
+    registerObjectType(typeIdentifierCandidates, typeValue);
+    const primaryObjectIdentifier = getPrimaryObjectIdentifierForTotals(identifierCandidates);
     if (!primaryObjectIdentifier) {
       continue;
     }
@@ -2189,7 +2202,7 @@ function buildTableHeaders(periods) {
     'Округ',
     totalHeader,
     rangeHeader,
-    '% проверенных объектов от общего количества ОДХ',
+    '% проверенных объектов от общего количества объектов',
     '% объектов с нарушениями',
     'Всего нарушений',
     'Нарушения, выявленные за отчётный период',
