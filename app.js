@@ -70,6 +70,18 @@ const violationFieldDefinitions = [
   },
   { key: 'objectType', label: 'Тип объекта', candidates: ['тип объекта', 'тип объекта контроля'] },
   { key: 'objectName', label: 'Наименование объекта', candidates: ['наименование объекта', 'наименование объекта контроля'] },
+  {
+    key: 'objectId',
+    label: 'ID объекта',
+    candidates: [
+      'id объекта',
+      'id объекта контроля',
+      'id объекта (uuid)',
+      'ид объекта',
+      'uuid объекта',
+    ],
+    optional: true,
+  },
   { key: 'inspectionDate', label: 'Дата обследования', candidates: ['дата обследования', 'дата осмотра', 'дата контроля'] },
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
   { key: 'dataSource', label: 'Источник данных', candidates: ['источник данных'], optional: true },
@@ -1760,6 +1772,32 @@ function shouldReplaceDistrictLabel(current, candidate) {
 
 // Пример использования: buildDistrictLookup([{ district: 'Центральный административный округ' }], 'district', [], 'district');
 
+function buildObjectIdentifierCandidates(idValue, nameValue) {
+  const candidates = [];
+  const normalizedId = normalizeKey(getValueAsString(idValue));
+  const normalizedName = normalizeKey(getValueAsString(nameValue));
+  if (normalizedId) {
+    candidates.push(`id:${normalizedId}`);
+  }
+  if (normalizedName) {
+    candidates.push(`name:${normalizedName}`);
+  }
+  if (candidates.length <= 1) {
+    return candidates;
+  }
+  const unique = new Set();
+  for (const candidate of candidates) {
+    if (!unique.has(candidate)) {
+      unique.add(candidate);
+    }
+  }
+  return Array.from(unique);
+}
+
+function getPrimaryObjectIdentifier(candidates) {
+  return candidates.length ? candidates[0] : '';
+}
+
 /**
  * Строит отчёт по округам на основании выбранных фильтров и периодов.
  *
@@ -1814,10 +1852,11 @@ function buildReport(periods) {
   };
 
   const allowedViolationObjects = new Set();
+  const violationObjectIdColumn = violationMapping.objectId;
   if (state.violationMode === 'custom' && state.customViolations.length) {
     const violationNameColumn = violationMapping.violationName;
     const violationObjectNameColumn = violationMapping.objectName;
-    if (violationNameColumn && violationObjectNameColumn) {
+    if (violationNameColumn && (violationObjectNameColumn || violationObjectIdColumn)) {
       for (const record of state.violations) {
         if (!dataSourcePredicate(record)) {
           continue;
@@ -1830,11 +1869,16 @@ function buildReport(periods) {
         if (!violationName || !violationPredicate(violationName)) {
           continue;
         }
-        const relatedObjectName = getValueAsString(record[violationObjectNameColumn]);
-        if (!relatedObjectName) {
+        const identifierCandidates = buildObjectIdentifierCandidates(
+          violationObjectIdColumn ? record[violationObjectIdColumn] : '',
+          violationObjectNameColumn ? record[violationObjectNameColumn] : '',
+        );
+        if (!identifierCandidates.length) {
           continue;
         }
-        allowedViolationObjects.add(normalizeKey(relatedObjectName));
+        for (const candidate of identifierCandidates) {
+          allowedViolationObjects.add(candidate);
+        }
       }
     }
   }
@@ -1851,29 +1895,27 @@ function buildReport(periods) {
       continue;
     }
     const districtLabel = getValueAsString(record[objectMapping.district]);
-    const objectName = getValueAsString(record[objectMapping.objectName]);
-    const normalizedObjectName = normalizeKey(objectName);
+    const identifierCandidates = buildObjectIdentifierCandidates(
+      objectIdColumn ? record[objectIdColumn] : '',
+      objectMapping.objectName ? record[objectMapping.objectName] : '',
+    );
+    const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
+    if (!primaryObjectIdentifier) {
+      continue;
+    }
     if (state.violationMode === 'custom') {
       if (!allowedViolationObjects.size) {
         continue;
       }
-      if (!normalizedObjectName || !allowedViolationObjects.has(normalizedObjectName)) {
+      const matchesAllowed = identifierCandidates.some((candidate) =>
+        allowedViolationObjects.has(candidate),
+      );
+      if (!matchesAllowed) {
         continue;
       }
     }
-    const objectIdValue = objectIdColumn ? getValueAsString(record[objectIdColumn]) : '';
-    const normalizedObjectId = normalizeKey(objectIdValue);
-    let objectIdentifier = '';
-    if (normalizedObjectId) {
-      objectIdentifier = `id:${normalizedObjectId}`;
-    } else if (normalizedObjectName) {
-      objectIdentifier = `name:${normalizedObjectName}`;
-    }
-    if (!objectIdentifier) {
-      continue;
-    }
     const entry = ensureEntry(districtLabel);
-    entry.totalObjects.add(objectIdentifier);
+    entry.totalObjects.add(primaryObjectIdentifier);
   }
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
@@ -1917,17 +1959,23 @@ function buildReport(periods) {
       : '';
     const normalizedInspectionResult = normalizeText(inspectionResultValue);
     const normalizedObjectName = normalizeKey(objectName);
+    const objectIdentifierCandidates = buildObjectIdentifierCandidates(
+      violationObjectIdColumn ? record[violationObjectIdColumn] : '',
+      violationMapping.objectName ? record[violationMapping.objectName] : '',
+    );
+    const primaryObjectIdentifier = getPrimaryObjectIdentifier(objectIdentifierCandidates);
+    const fallbackObjectIdentifier = primaryObjectIdentifier || (normalizedObjectName ? `name:${normalizedObjectName}` : '');
 
     if (isWithinPeriod(inspectionDate, periods.current)) {
-      if (normalizedObjectName) {
-        entry.inspectedObjects.add(normalizedObjectName);
+      if (fallbackObjectIdentifier) {
+        entry.inspectedObjects.add(fallbackObjectIdentifier);
       }
       if (
         inspectionResultColumn &&
-        normalizedObjectName &&
+        fallbackObjectIdentifier &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
-        entry.objectsWithDetectedViolations.add(normalizedObjectName);
+        entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
       }
       if (
         hasViolationName &&
