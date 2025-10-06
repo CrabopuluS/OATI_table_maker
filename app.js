@@ -30,6 +30,39 @@ const MOSCOW_DISTRICT_ABBREVIATION_KEYS = new Set(
 // На случай, когда в данных вообще нет округа, завожу понятный ключ.
 const DISTRICT_FALLBACK_KEY = 'без округа';
 
+const DISTRICT_DISPLAY_ORDER = Object.freeze([
+  'ЦАО',
+  'САО',
+  'СВАО',
+  'ВАО',
+  'ЮВАО',
+  'ЮАО',
+  'ЮЗАО',
+  'ЗАО',
+  'СЗАО',
+  'ЗелАО',
+  'ТиНАО',
+  'Без округа',
+]);
+
+const TINAO_AGGREGATION_KEYS = new Set([
+  'новомосковский административный округ',
+  'троицкий административный округ',
+  'троицкий и новомосковский административный округ',
+  'новомосковский округ',
+  'троицкий округ',
+  'троицкий и новомосковский округ',
+  'новомосковский адм. округ',
+  'троицкий адм. округ',
+  'троицкий и новомосковский адм. округ',
+  'новомосковский ао',
+  'троицкий ао',
+  'троицкий и новомосковский ао',
+  'нао',
+  'тао',
+  'тинао',
+]);
+
 // Здесь расписал какие поля мы ожидаем получить из таблицы нарушений.
 const violationFieldDefinitions = [
   { key: 'id', label: 'Идентификатор нарушения', candidates: ['идентификатор', 'id', 'uid'] },
@@ -72,6 +105,7 @@ const state = {
   lastReport: null,
   lastPeriods: null,
   dataSourceOption: 'all',
+  combineTiNao: false,
 };
 
 // Чтобы лишний раз не перерисовывать таблицу при серии событий, ввёл очередь на requestAnimationFrame.
@@ -103,6 +137,7 @@ const elements = {
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
   downloadButton: document.getElementById('download-report'),
+  mergeTiNaoToggle: document.getElementById('merge-tinao-toggle'),
   themeToggle: document.getElementById('theme-toggle'),
   themeToggleLabel: document.getElementById('theme-toggle-text'),
   brandLogo: document.querySelector('.brand-logo'),
@@ -669,6 +704,17 @@ if (elements.dataSourceSelect) {
       return;
     }
     state.dataSourceOption = target.value;
+    schedulePreviewUpdate();
+  });
+}
+
+if (elements.mergeTiNaoToggle) {
+  elements.mergeTiNaoToggle.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    state.combineTiNao = target.checked;
     schedulePreviewUpdate();
   });
 }
@@ -1640,6 +1686,44 @@ function normalizeDistrictKey(value) {
   return withoutCityMention.replace(/\s+/g, ' ').trim();
 }
 
+const TINAO_AGGREGATED_KEY = normalizeDistrictKey('ТиНАО');
+const DISTRICT_SORT_ORDER_INDEX = buildDistrictSortOrderIndex();
+
+function buildDistrictSortOrderIndex() {
+  const orderMap = new Map();
+  DISTRICT_DISPLAY_ORDER.forEach((label, index) => {
+    const normalized = normalizeDistrictKey(label);
+    if (normalized) {
+      orderMap.set(normalized, index);
+    } else {
+      orderMap.set(DISTRICT_FALLBACK_KEY, index);
+    }
+  });
+  if (!orderMap.has(DISTRICT_FALLBACK_KEY)) {
+    const fallbackIndex = DISTRICT_DISPLAY_ORDER.indexOf('Без округа');
+    if (fallbackIndex !== -1) {
+      orderMap.set(DISTRICT_FALLBACK_KEY, fallbackIndex);
+    }
+  }
+  if (TINAO_AGGREGATED_KEY) {
+    const tinaoIndex = orderMap.get(TINAO_AGGREGATED_KEY);
+    if (typeof tinaoIndex === 'number') {
+      orderMap.set('нао', tinaoIndex);
+      orderMap.set('тао', tinaoIndex);
+      orderMap.set(TINAO_AGGREGATED_KEY, tinaoIndex);
+    }
+  }
+  return orderMap;
+}
+
+function getDistrictSortIndex(label) {
+  const normalized = normalizeDistrictKey(label) || DISTRICT_FALLBACK_KEY;
+  if (DISTRICT_SORT_ORDER_INDEX.has(normalized)) {
+    return DISTRICT_SORT_ORDER_INDEX.get(normalized);
+  }
+  return DISTRICT_DISPLAY_ORDER.length + 1;
+}
+
 /**
  * Формирует таблицу соответствий между оригинальными подписями округов и отображаемыми значениями.
  *
@@ -1735,13 +1819,27 @@ function buildReport(periods) {
     state.violations,
     violationMapping.district,
   );
-  const ensureEntry = (label) => {
+  const resolveDistrictEntry = (label) => {
     const normalizedKey = normalizeDistrictKey(label);
-    const key = normalizedKey || DISTRICT_FALLBACK_KEY;
-    const displayLabel = districtLookup.get(key) ?? (normalizedKey ? getDistrictDisplayLabel(label) : 'Без округа');
-    const aggregatedKey = normalizeKey(displayLabel) || DISTRICT_FALLBACK_KEY;
-    if (!districtData.has(aggregatedKey)) {
-      districtData.set(aggregatedKey, {
+    if (!normalizedKey) {
+      return { aggregatedKey: DISTRICT_FALLBACK_KEY, displayLabel: 'Без округа' };
+    }
+    if (state.combineTiNao && TINAO_AGGREGATION_KEYS.has(normalizedKey)) {
+      return {
+        aggregatedKey: TINAO_AGGREGATED_KEY || 'тинао',
+        displayLabel: 'ТиНАО',
+      };
+    }
+    const lookupKey = normalizedKey;
+    const displayLabel = districtLookup.get(lookupKey) ?? getDistrictDisplayLabel(label);
+    const aggregatedKey = normalizeDistrictKey(displayLabel) || lookupKey || DISTRICT_FALLBACK_KEY;
+    return { aggregatedKey, displayLabel };
+  };
+  const ensureEntry = (label) => {
+    const { aggregatedKey, displayLabel } = resolveDistrictEntry(label);
+    const key = aggregatedKey || DISTRICT_FALLBACK_KEY;
+    if (!districtData.has(key)) {
+      districtData.set(key, {
         label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
@@ -1751,12 +1849,12 @@ function buildReport(periods) {
         resolvedCount: 0,
       });
     } else {
-      const entry = districtData.get(aggregatedKey);
+      const entry = districtData.get(key);
       if (entry && shouldReplaceDistrictLabel(entry.label, displayLabel)) {
         entry.label = displayLabel;
       }
     }
-    return districtData.get(aggregatedKey);
+    return districtData.get(key);
   };
 
   const allowedViolationObjects = new Set();
@@ -1880,7 +1978,14 @@ function buildReport(periods) {
     onControl: 0,
   };
 
-  const sortedEntries = Array.from(districtData.values()).sort((a, b) => a.label.localeCompare(b.label, 'ru'));
+  const sortedEntries = Array.from(districtData.values()).sort((a, b) => {
+    const indexA = getDistrictSortIndex(a.label);
+    const indexB = getDistrictSortIndex(b.label);
+    if (indexA !== indexB) {
+      return indexA - indexB;
+    }
+    return a.label.localeCompare(b.label, 'ru');
+  });
   for (const entry of sortedEntries) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
