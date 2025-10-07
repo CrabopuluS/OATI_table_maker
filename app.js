@@ -242,16 +242,23 @@ class AvailabilityDatePicker {
         if (!item || typeof item.iso !== 'string') {
           continue;
         }
-        const iso = item.iso;
+        const iso = item.iso.trim();
+        if (!iso) {
+          continue;
+        }
         let baseDate = item.date instanceof Date ? new Date(item.date.getTime()) : null;
-        if (!(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) {
+        if (!isValidDate(baseDate)) {
           const parsed = parseIsoDate(iso);
-          if (Number.isNaN(parsed.getTime())) {
+          if (!parsed) {
             continue;
           }
           baseDate = parsed;
         }
-        normalizedDates.push({ iso, date: baseDate });
+        const normalizedIso = formatIsoDate(baseDate);
+        if (!normalizedIso) {
+          continue;
+        }
+        normalizedDates.push({ iso: normalizedIso, date: baseDate });
         const monthKey = `${baseDate.getFullYear()}-${baseDate.getMonth()}`;
         if (!seenMonths.has(monthKey)) {
           seenMonths.set(monthKey, { year: baseDate.getFullYear(), month: baseDate.getMonth() });
@@ -307,7 +314,7 @@ class AvailabilityDatePicker {
     const value = this.getValue();
     if (value) {
       const parsed = parseIsoDate(value);
-      if (!Number.isNaN(parsed.getTime())) {
+      if (parsed) {
         this.valueNode.textContent = formatDateDisplay(parsed);
       } else {
         this.valueNode.textContent = value;
@@ -380,7 +387,7 @@ class AvailabilityDatePicker {
       return;
     }
     const parsed = parseIsoDate(value);
-    if (Number.isNaN(parsed.getTime())) {
+    if (!parsed) {
       return;
     }
     const key = `${parsed.getFullYear()}-${parsed.getMonth()}`;
@@ -476,6 +483,13 @@ class AvailabilityDatePicker {
     for (let day = 1; day <= daysInMonth; day += 1) {
       const dateObject = new Date(monthInfo.year, monthInfo.month, day);
       const iso = formatIsoDate(dateObject);
+      if (!iso) {
+        const dayCell = document.createElement('span');
+        dayCell.className = 'date-picker__day is-disabled';
+        dayCell.textContent = String(day);
+        grid.append(dayCell);
+        continue;
+      }
       if (this.availableSet.has(iso)) {
         const dayButton = document.createElement('button');
         dayButton.type = 'button';
@@ -1169,7 +1183,7 @@ function updateDatePicker(picker, dates, defaultIndex) {
   if (!picker) {
     return;
   }
-  const availableValues = new Set(dates.map((item) => item.iso));
+  const availableValues = new Set(dates.map((item) => item.iso).filter(Boolean));
   const previousValue = picker.getValue();
   picker.setAvailableDates(dates);
   let nextValue = '';
@@ -1635,37 +1649,61 @@ function isMappingComplete(mapping, definitions) {
  *   Возвращает объект с выбранными периодами или null при ошибке.
  */
 function getSelectedPeriods() {
-  const currentStartIso = elements.currentStart?.value ?? '';
-  const currentEndIso = elements.currentEnd?.value ?? '';
-  const previousStartIso = elements.previousStart?.value ?? '';
-  const previousEndIso = elements.previousEnd?.value ?? '';
-  if (!currentStartIso || !currentEndIso) {
-    // Без отчётного периода отчёт не построить.
-    showPreviewMessage('Выберите даты начала и окончания отчётного периода.');
-    return null;
-  }
-  if (!previousStartIso || !previousEndIso) {
-    showPreviewMessage('Выберите даты предыдущего периода.');
-    return null;
-  }
-  if (currentStartIso > currentEndIso) {
-    showPreviewMessage('Дата начала отчётного периода не может быть позже даты окончания.');
-    return null;
-  }
-  if (previousStartIso > previousEndIso) {
-    showPreviewMessage('Дата начала предыдущего периода не может быть позже даты окончания.');
-    return null;
-  }
-  return {
-    current: {
-      start: parseIsoDate(currentStartIso),
-      end: parseIsoDate(currentEndIso),
+  const current = parsePeriodSelection(
+    elements.currentStart?.value ?? '',
+    elements.currentEnd?.value ?? '',
+    {
+      missing: 'Выберите даты начала и окончания отчётного периода.',
+      invalid: 'Выберите корректные даты отчётного периода.',
+      order: 'Дата начала отчётного периода не может быть позже даты окончания.',
     },
-    previous: {
-      start: parseIsoDate(previousStartIso),
-      end: parseIsoDate(previousEndIso),
+  );
+  if (!current) {
+    return null;
+  }
+
+  const previous = parsePeriodSelection(
+    elements.previousStart?.value ?? '',
+    elements.previousEnd?.value ?? '',
+    {
+      missing: 'Выберите даты предыдущего периода.',
+      invalid: 'Выберите корректные даты предыдущего периода.',
+      order: 'Дата начала предыдущего периода не может быть позже даты окончания.',
     },
-  };
+  );
+  if (!previous) {
+    return null;
+  }
+
+  return { current, previous };
+}
+
+/**
+ * Валидирует и преобразует выбранный пользователем диапазон дат.
+ *
+ * @param {string} startIso Дата начала периода в формате ISO.
+ * @param {string} endIso Дата окончания периода в формате ISO.
+ * @param {{missing: string, invalid: string, order: string}} messages Сообщения об ошибках.
+ * @returns {{start: Date, end: Date} | null} Диапазон дат или null, если проверка не пройдена.
+ */
+function parsePeriodSelection(startIso, endIso, messages) {
+  const startValue = typeof startIso === 'string' ? startIso.trim() : '';
+  const endValue = typeof endIso === 'string' ? endIso.trim() : '';
+  if (!startValue || !endValue) {
+    showPreviewMessage(messages.missing);
+    return null;
+  }
+  const startDate = parseIsoDate(startValue);
+  const endDate = parseIsoDate(endValue);
+  if (!startDate || !endDate) {
+    showPreviewMessage(messages.invalid);
+    return null;
+  }
+  if (startDate > endDate) {
+    showPreviewMessage(messages.order);
+    return null;
+  }
+  return { start: startDate, end: endDate };
 }
 
 /**
@@ -2336,14 +2374,45 @@ function showPreviewMessage(message) {
 }
 
 /**
+ * Проверяет, что значение является корректным объектом Date.
+ *
+ * @param {unknown} value Проверяемое значение.
+ * @returns {boolean} true, если дата валидна.
+ */
+function isValidDate(value) {
+  return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
+/**
  * Преобразует ISO-строку в объект Date без учёта временной части.
  *
  * @param {string} iso Строка формата YYYY-MM-DD.
- * @returns {Date} Объект даты.
+ * @returns {Date | null} Объект даты или null при ошибке.
  */
 function parseIsoDate(iso) {
-  const [year, month, day] = iso.split('-').map((part) => Number.parseInt(part, 10));
-  return new Date(year, month - 1, day);
+  if (typeof iso !== 'string') {
+    return null;
+  }
+  const trimmed = iso.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const match = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) {
+    return null;
+  }
+  const [, yearText, monthText, dayText] = match;
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (!isValidDate(date) || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return date;
 }
 
 /**
@@ -2486,10 +2555,11 @@ function extractUniqueDates(records, column) {
       continue;
     }
     const iso = formatIsoDate(date);
-    if (!seen.has(iso)) {
-      seen.add(iso);
-      dates.push({ iso, date });
+    if (!iso || seen.has(iso)) {
+      continue;
     }
+    seen.add(iso);
+    dates.push({ iso, date });
   }
   dates.sort((a, b) => a.iso.localeCompare(b.iso));
   return dates;
@@ -2506,14 +2576,15 @@ function parseDateValue(value) {
     return null;
   }
   if (value instanceof Date) {
-    return new Date(value.getTime());
+    return isValidDate(value) ? new Date(value.getTime()) : null;
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     const parsed = XLSX.SSF?.parse_date_code?.(value);
     if (!parsed) {
       return null;
     }
-    return new Date(parsed.y, parsed.m - 1, parsed.d);
+    const date = new Date(parsed.y, parsed.m - 1, parsed.d);
+    return isValidDate(date) ? date : null;
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -2523,12 +2594,27 @@ function parseDateValue(value) {
     // Поддерживаю формат «дд.мм.гггг» с необязательным временем.
     const dateTimeMatch = trimmed.match(/^(\d{1,2})[.](\d{1,2})[.](\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
     if (dateTimeMatch) {
-      const [, day, month, year] = dateTimeMatch;
-      return new Date(Number(year), Number(month) - 1, Number(day));
+      const [, dayRaw, monthRaw, yearRaw] = dateTimeMatch;
+      const day = Number.parseInt(dayRaw, 10);
+      const month = Number.parseInt(monthRaw, 10);
+      const year = Number.parseInt(yearRaw, 10);
+      if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year)) {
+        const date = new Date(year, month - 1, day);
+        if (
+          isValidDate(date)
+          && date.getFullYear() === year
+          && date.getMonth() === month - 1
+          && date.getDate() === day
+        ) {
+          return date;
+        }
+      }
+      return null;
     }
     const isoDate = Date.parse(trimmed);
     if (Number.isFinite(isoDate)) {
-      return new Date(isoDate);
+      const date = new Date(isoDate);
+      return isValidDate(date) ? date : null;
     }
   }
   return null;
@@ -2541,6 +2627,9 @@ function parseDateValue(value) {
  * @returns {string} ISO-строка.
  */
 function formatIsoDate(date) {
+  if (!isValidDate(date)) {
+    return '';
+  }
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -2554,7 +2643,7 @@ function formatIsoDate(date) {
  * @returns {string} Отформатированная строка.
  */
 function formatDateDisplay(date) {
-  if (!(date instanceof Date)) {
+  if (!isValidDate(date)) {
     return '';
   }
   const day = String(date.getDate()).padStart(2, '0');
@@ -2570,7 +2659,7 @@ function formatDateDisplay(date) {
  * @returns {string} Строка без года.
  */
 function formatDateDisplayShort(date) {
-  if (!(date instanceof Date)) {
+  if (!isValidDate(date)) {
     return '';
   }
   const day = String(date.getDate()).padStart(2, '0');
@@ -2612,7 +2701,7 @@ function collectUniqueValues(records, column) {
  * @returns {boolean} true, если дата внутри диапазона.
  */
 function isWithinPeriod(date, period) {
-  if (!period) {
+  if (!isValidDate(date) || !period || !isValidDate(period.start) || !isValidDate(period.end)) {
     return false;
   }
   const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -2985,8 +3074,8 @@ function formatTitlePeriod(period) {
     return '';
   }
   const sameYear =
-    period.start instanceof Date &&
-    period.end instanceof Date &&
+    isValidDate(period.start) &&
+    isValidDate(period.end) &&
     period.start.getFullYear() === period.end.getFullYear();
   const start = sameYear ? formatDateDisplayShort(period.start) : formatDateDisplay(period.start);
   const end = sameYear ? formatDateDisplayShort(period.end) : formatDateDisplay(period.end);
@@ -3003,6 +3092,9 @@ function formatTitlePeriod(period) {
  * @returns {string} Строка вида YYYY-MM-DD.
  */
 function formatDateForFileName(date) {
+  if (!isValidDate(date)) {
+    return '0000-00-00';
+  }
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
