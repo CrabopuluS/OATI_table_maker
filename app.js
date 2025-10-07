@@ -1887,7 +1887,7 @@ function buildReport(periods) {
         label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
-        detectedViolationRecordsCount: 0,
+        objectsWithDetectedViolations: new Set(),
         currentViolationsCount: 0,
         previousControlCount: 0,
         resolvedCount: 0,
@@ -1991,10 +1991,11 @@ function buildReport(periods) {
       }
       if (
         inspectionResultColumn &&
+        fallbackObjectIdentifier &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION &&
         matchesViolationFilter
       ) {
-        entry.detectedViolationRecordsCount += 1;
+        entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
       }
       if (
         hasViolationName &&
@@ -2022,7 +2023,7 @@ function buildReport(periods) {
   const totals = {
     totalObjects: 0,
     inspectedObjects: 0,
-    detectedViolationRecords: 0,
+    objectsWithDetectedViolations: 0,
     totalViolations: 0,
     currentViolations: 0,
     previousControl: 0,
@@ -2034,7 +2035,7 @@ function buildReport(periods) {
   for (const entry of sortedEntries) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
-    const detectedViolationRecordsCount = entry.detectedViolationRecordsCount;
+    const objectsWithDetectedViolationsCount = entry.objectsWithDetectedViolations.size;
     const currentViolationsCount = entry.currentViolationsCount;
     const previousControlCount = entry.previousControlCount;
     const resolvedCount = entry.resolvedCount;
@@ -2046,7 +2047,7 @@ function buildReport(periods) {
       state.typeMode === 'custom' &&
       totalObjectsCount === 0 &&
       inspectedCount === 0 &&
-      detectedViolationRecordsCount === 0 &&
+      objectsWithDetectedViolationsCount === 0 &&
       totalViolationsCount === 0 &&
       previousControlCount === 0 &&
       resolvedCount === 0 &&
@@ -2060,7 +2061,7 @@ function buildReport(periods) {
       totalObjects: totalObjectsCount,
       inspectedObjects: inspectedCount,
       inspectedPercent: computePercent(inspectedCount, totalObjectsCount),
-      violationPercent: computePercent(detectedViolationRecordsCount, inspectedCount),
+      violationPercent: computePercent(objectsWithDetectedViolationsCount, inspectedCount),
       totalViolations: totalViolationsCount,
       currentViolations: currentViolationsCount,
       previousControl: previousControlCount,
@@ -2070,7 +2071,7 @@ function buildReport(periods) {
 
     totals.totalObjects += totalObjectsCount;
     totals.inspectedObjects += inspectedCount;
-    totals.detectedViolationRecords += detectedViolationRecordsCount;
+    totals.objectsWithDetectedViolations += objectsWithDetectedViolationsCount;
     totals.currentViolations += currentViolationsCount;
     totals.previousControl += previousControlCount;
     totals.resolved += resolvedCount;
@@ -2083,7 +2084,7 @@ function buildReport(periods) {
     totalObjects: totals.totalObjects,
     inspectedObjects: totals.inspectedObjects,
     inspectedPercent: computePercent(totals.inspectedObjects, totals.totalObjects),
-    violationPercent: computePercent(totals.detectedViolationRecords, totals.inspectedObjects),
+    violationPercent: computePercent(totals.objectsWithDetectedViolations, totals.inspectedObjects),
     totalViolations: totals.totalViolations,
     currentViolations: totals.currentViolations,
     previousControl: totals.previousControl,
