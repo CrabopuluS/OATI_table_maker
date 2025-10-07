@@ -1992,8 +1992,7 @@ function buildReport(periods) {
       if (
         inspectionResultColumn &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION &&
-        matchesViolationFilter &&
-        fallbackObjectIdentifier
+        matchesViolationFilter
       ) {
         entry.detectedViolationRecordsCount += 1;
       }
@@ -2035,7 +2034,7 @@ function buildReport(periods) {
   for (const entry of sortedEntries) {
     const totalObjectsCount = entry.totalObjects.size;
     const inspectedCount = entry.inspectedObjects.size;
-    const detectedViolationObjectsCount = entry.objectsWithDetectedViolations.size;
+    const detectedViolationRecordsCount = entry.detectedViolationRecordsCount;
     const currentViolationsCount = entry.currentViolationsCount;
     const previousControlCount = entry.previousControlCount;
     const resolvedCount = entry.resolvedCount;
@@ -2047,7 +2046,7 @@ function buildReport(periods) {
       state.typeMode === 'custom' &&
       totalObjectsCount === 0 &&
       inspectedCount === 0 &&
-      detectedViolationObjectsCount === 0 &&
+      detectedViolationRecordsCount === 0 &&
       totalViolationsCount === 0 &&
       previousControlCount === 0 &&
       resolvedCount === 0 &&
@@ -2061,7 +2060,7 @@ function buildReport(periods) {
       totalObjects: totalObjectsCount,
       inspectedObjects: inspectedCount,
       inspectedPercent: computePercent(inspectedCount, totalObjectsCount),
-      violationPercent: computePercent(detectedViolationObjectsCount, inspectedCount),
+      violationPercent: computePercent(detectedViolationRecordsCount, inspectedCount),
       totalViolations: totalViolationsCount,
       currentViolations: currentViolationsCount,
       previousControl: previousControlCount,
@@ -2071,7 +2070,7 @@ function buildReport(periods) {
 
     totals.totalObjects += totalObjectsCount;
     totals.inspectedObjects += inspectedCount;
-    totals.objectsWithDetectedViolations += detectedViolationObjectsCount;
+    totals.detectedViolationRecords += detectedViolationRecordsCount;
     totals.currentViolations += currentViolationsCount;
     totals.previousControl += previousControlCount;
     totals.resolved += resolvedCount;
