@@ -1902,38 +1902,8 @@ function buildReport(periods) {
     return districtData.get(aggregatedKey);
   };
 
-  const allowedViolationObjects = new Set();
   const violationObjectIdColumn = violationMapping.objectId;
-  if (state.violationMode === 'custom' && state.customViolations.length) {
-    const violationNameColumn = violationMapping.violationName;
-    const violationObjectNameColumn = violationMapping.objectName;
-    if (violationNameColumn && (violationObjectNameColumn || violationObjectIdColumn)) {
-      for (const record of state.violations) {
-        if (!dataSourcePredicate(record)) {
-          continue;
-        }
-        const statusValue = getValueAsString(record[violationMapping.status]);
-        if (normalizeText(statusValue) === DRAFT_STATUS) {
-          continue;
-        }
-        const violationName = getValueAsString(record[violationNameColumn]);
-        if (!violationName || !violationPredicate(violationName)) {
-          continue;
-        }
-        const identifierCandidates = buildObjectIdentifierCandidates(
-          violationObjectIdColumn ? record[violationObjectIdColumn] : '',
-          violationObjectNameColumn ? record[violationObjectNameColumn] : '',
-        );
-        if (!identifierCandidates.length) {
-          continue;
-        }
-        for (const candidate of identifierCandidates) {
-          allowedViolationObjects.add(candidate);
-        }
-      }
-    }
-  }
-
+  const violationNameColumn = violationMapping.violationName;
   const objectIdColumn = objectMapping.objectId;
   const externalObjectIdColumn = objectMapping.externalObjectId;
 
@@ -1957,17 +1927,6 @@ function buildReport(periods) {
       externalObjectIdColumn ? record[externalObjectIdColumn] : '',
     );
     const primaryObjectIdentifier = getPrimaryObjectIdentifier(identifierCandidates);
-    if (state.violationMode === 'custom') {
-      if (!allowedViolationObjects.size) {
-        continue;
-      }
-      const matchesAllowed = identifierCandidates.some((candidate) =>
-        allowedViolationObjects.has(candidate),
-      );
-      if (!matchesAllowed) {
-        continue;
-      }
-    }
     const totalObjectIdentifier = normalizedExternalIdentifier
       ? `external:${normalizedExternalIdentifier}`
       : primaryObjectIdentifier;
@@ -1980,6 +1939,8 @@ function buildReport(periods) {
 
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
   const inspectionResultColumn = violationMapping.inspectionResult;
+
+  const shouldApplyViolationFilter = state.violationMode === 'custom' && state.customViolations.length;
 
   for (const record of state.violations) {
     if (!dataSourcePredicate(record)) {
@@ -1995,15 +1956,13 @@ function buildReport(periods) {
     const districtLabel = getValueAsString(record[violationMapping.district]);
     const objectName = getValueAsString(record[violationMapping.objectName]);
     const status = getValueAsString(record[violationMapping.status]);
-    const violationName = getValueAsString(record[violationMapping.violationName]);
+    const violationName = violationNameColumn
+      ? getValueAsString(record[violationNameColumn])
+      : '';
     const normalizedViolationName = normalizeKey(violationName);
     const hasViolationName = Boolean(normalizedViolationName);
-    if (hasViolationName && !violationPredicate(violationName)) {
-      continue;
-    }
-    if (!hasViolationName && state.violationMode === 'custom') {
-      continue;
-    }
+    const matchesViolationFilter =
+      !shouldApplyViolationFilter || (hasViolationName && violationPredicate(violationName));
     const normalizedStatus = normalizeText(status);
     if (normalizedStatus === DRAFT_STATUS) {
       continue;
@@ -2033,26 +1992,28 @@ function buildReport(periods) {
       if (
         inspectionResultColumn &&
         fallbackObjectIdentifier &&
-        normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
+        normalizedInspectionResult === INSPECTION_RESULT_VIOLATION &&
+        matchesViolationFilter
       ) {
         entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
       }
       if (
         hasViolationName &&
+        matchesViolationFilter &&
         inspectionResultColumn &&
         normalizedInspectionResult === INSPECTION_RESULT_VIOLATION
       ) {
         entry.currentViolationsCount += 1;
       }
-      if (hasViolationName && normalizedStatus === RESOLVED_STATUS) {
+      if (hasViolationName && matchesViolationFilter && normalizedStatus === RESOLVED_STATUS) {
         entry.resolvedCount += 1;
       }
-      if (hasViolationName && CURRENT_CONTROL_STATUS_SET.has(normalizedStatus)) {
+      if (hasViolationName && matchesViolationFilter && CURRENT_CONTROL_STATUS_SET.has(normalizedStatus)) {
         entry.currentControlStatusesCount += 1;
       }
     }
     if (isWithinPeriod(inspectionDate, periods.previous)) {
-      if (hasViolationName && CONTROL_STATUS_SET.has(normalizedStatus)) {
+      if (hasViolationName && matchesViolationFilter && CONTROL_STATUS_SET.has(normalizedStatus)) {
         entry.previousControlCount += 1;
       }
     }
