@@ -1887,7 +1887,7 @@ function buildReport(periods) {
         label: displayLabel,
         totalObjects: new Set(),
         inspectedObjects: new Set(),
-        objectsWithDetectedViolations: new Set(),
+        detectedViolationRecordsCount: 0,
         currentViolationsCount: 0,
         previousControlCount: 0,
         resolvedCount: 0,
@@ -1995,7 +1995,7 @@ function buildReport(periods) {
         matchesViolationFilter &&
         fallbackObjectIdentifier
       ) {
-        entry.objectsWithDetectedViolations.add(fallbackObjectIdentifier);
+        entry.detectedViolationRecordsCount += 1;
       }
       if (
         hasViolationName &&
@@ -2023,7 +2023,7 @@ function buildReport(periods) {
   const totals = {
     totalObjects: 0,
     inspectedObjects: 0,
-    objectsWithDetectedViolations: 0,
+    detectedViolationRecords: 0,
     totalViolations: 0,
     currentViolations: 0,
     previousControl: 0,
@@ -2084,7 +2084,7 @@ function buildReport(periods) {
     totalObjects: totals.totalObjects,
     inspectedObjects: totals.inspectedObjects,
     inspectedPercent: computePercent(totals.inspectedObjects, totals.totalObjects),
-    violationPercent: computePercent(totals.objectsWithDetectedViolations, totals.inspectedObjects),
+    violationPercent: computePercent(totals.detectedViolationRecords, totals.inspectedObjects),
     totalViolations: totals.totalViolations,
     currentViolations: totals.currentViolations,
     previousControl: totals.previousControl,
