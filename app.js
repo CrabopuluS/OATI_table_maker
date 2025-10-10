@@ -111,6 +111,91 @@ const objectFieldDefinitions = [
   { key: 'district', label: 'Округ', candidates: ['округ', 'административный округ', 'округ объекта'] },
 ];
 
+const employeeRegistryFieldDefinitions = [
+  {
+    key: 'employeeName',
+    label: 'ФИО сотрудника',
+    candidates: [
+      'фио',
+      'фио сотрудника',
+      'сотрудник',
+      'фамилия имя отчество',
+      'фамилия имя',
+      'работник',
+    ],
+  },
+  {
+    key: 'employeeId',
+    label: 'Табельный номер',
+    candidates: ['табельный номер', 'таб. номер', 'таб №', 'id сотрудника', 'id', 'uid', 'таб номер'],
+    optional: true,
+  },
+  {
+    key: 'department',
+    label: 'Подразделение',
+    candidates: ['подразделение', 'департамент', 'отдел', 'структурное подразделение'],
+    optional: true,
+  },
+  {
+    key: 'position',
+    label: 'Должность',
+    candidates: ['должность', 'роль', 'позиция'],
+    optional: true,
+  },
+  {
+    key: 'email',
+    label: 'Электронная почта',
+    candidates: ['email', 'e-mail', 'почта', 'электронная почта'],
+    optional: true,
+  },
+];
+
+const testResultFieldDefinitions = [
+  {
+    key: 'employeeName',
+    label: 'ФИО сотрудника',
+    candidates: [
+      'фио',
+      'фио сотрудника',
+      'сотрудник',
+      'участник',
+      'фамилия имя отчество',
+      'фамилия имя',
+      'работник',
+    ],
+  },
+  {
+    key: 'employeeId',
+    label: 'Табельный номер',
+    candidates: ['табельный номер', 'таб. номер', 'таб №', 'id сотрудника', 'id', 'uid', 'таб номер'],
+    optional: true,
+  },
+  {
+    key: 'testName',
+    label: 'Название теста',
+    candidates: ['название теста', 'тест', 'курс', 'мероприятие', 'оценка (курс)'],
+    optional: true,
+  },
+  {
+    key: 'testResult',
+    label: 'Результат теста',
+    candidates: ['результат', 'статус', 'итог', 'оценка'],
+    optional: true,
+  },
+  {
+    key: 'testScore',
+    label: 'Баллы/процент',
+    candidates: ['баллы', 'процент', 'оценка (%)', 'результат (%)', 'score'],
+    optional: true,
+  },
+  {
+    key: 'testDate',
+    label: 'Дата теста',
+    candidates: ['дата', 'дата теста', 'дата прохождения', 'дата тестирования', 'дата завершения'],
+    optional: true,
+  },
+];
+
 // Централизованное состояние приложения, чтобы не расползались глобальные переменные.
 const state = {
   violations: [],
@@ -130,6 +215,13 @@ const state = {
   lastPeriods: null,
   dataSourceOption: 'all',
   combineTiNaoDistricts: false,
+  employeeRegistry: [],
+  employeeRegistryColumns: [],
+  employeeRegistryMapping: {},
+  testResultFiles: [],
+  testResultColumns: [],
+  testResultMapping: {},
+  lastTestMatch: null,
 };
 
 // Чтобы лишний раз не перерисовывать таблицу при серии событий, ввёл очередь на requestAnimationFrame.
@@ -147,6 +239,8 @@ const elements = {
   previewSection: document.getElementById('preview-section'),
   violationsLoader: document.getElementById('violations-loader'),
   objectsLoader: document.getElementById('objects-loader'),
+  employeeRegistryLoader: document.getElementById('employee-registry-loader'),
+  testResultsLoader: document.getElementById('test-results-loader'),
   currentStart: document.getElementById('current-start'),
   currentEnd: document.getElementById('current-end'),
   previousStart: document.getElementById('previous-start'),
@@ -168,6 +262,14 @@ const elements = {
   easterEggMessage: document.getElementById('easter-egg-message'),
   creditBadge: document.querySelector('.credit-badge'),
   creditBadgeClose: document.querySelector('.credit-badge__close'),
+  employeeRegistryInput: document.getElementById('employee-registry-file'),
+  testResultsInput: document.getElementById('test-results-files'),
+  testMappingWrapper: document.getElementById('test-mapping-wrapper'),
+  employeeRegistryMapping: document.getElementById('employee-registry-mapping'),
+  testResultsMapping: document.getElementById('test-results-mapping'),
+  processTestResultsButton: document.getElementById('process-test-results'),
+  downloadTestResultsButton: document.getElementById('download-test-results'),
+  testMatchingMessage: document.getElementById('test-matching-message'),
 };
 
 const MONTH_NAMES_RU = [
@@ -717,6 +819,56 @@ if (elements.objectsInput) {
   });
 }
 
+if (elements.employeeRegistryInput) {
+  elements.employeeRegistryInput.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setLoadingIndicator('employeeRegistry', true, file.name);
+    try {
+      await loadEmployeeRegistry(file);
+    } finally {
+      setLoadingIndicator('employeeRegistry', false);
+    }
+  });
+}
+
+if (elements.testResultsInput) {
+  elements.testResultsInput.addEventListener('change', async (event) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) {
+      return;
+    }
+    const limitedFiles = files.slice(0, 12);
+    const indicatorLabel =
+      limitedFiles.length === 1 ? limitedFiles[0].name : `Выбрано ${limitedFiles.length} файлов`;
+    setLoadingIndicator('testResults', true, indicatorLabel);
+    try {
+      await loadTestResultsFiles(limitedFiles, files.length > 12);
+    } finally {
+      setLoadingIndicator('testResults', false);
+    }
+  });
+}
+
+if (elements.processTestResultsButton) {
+  elements.processTestResultsButton.addEventListener('click', () => {
+    processTestResults();
+  });
+}
+
+if (elements.downloadTestResultsButton) {
+  elements.downloadTestResultsButton.addEventListener('click', () => {
+    if (state.lastTestMatch) {
+      exportTestMatchesToExcel(state.lastTestMatch);
+    }
+  });
+}
+
+updateTestMatchingVisibility();
+showTestMatchingMessage('Загрузите перечень сотрудников и файлы тестов, чтобы начать сверку.');
+
 if (elements.refreshButton) {
   // Принудительный пересчет отчёта — без ожидания кадра, чтобы пользователь увидел мгновенную реакцию.
   elements.refreshButton.addEventListener('click', () => {
@@ -836,6 +988,8 @@ function setLoadingIndicator(kind, isLoading, fileName) {
   const loaderMap = {
     violations: elements.violationsLoader,
     objects: elements.objectsLoader,
+    employeeRegistry: elements.employeeRegistryLoader,
+    testResults: elements.testResultsLoader,
   };
   const loader = loaderMap[kind];
   if (!loader) {
@@ -849,6 +1003,101 @@ function setLoadingIndicator(kind, isLoading, fileName) {
     loader.hidden = false;
   } else {
     loader.hidden = true;
+  }
+}
+
+async function loadEmployeeRegistry(file) {
+  try {
+    showTestMatchingMessage(`Загрузка файла «${file.name}»...`);
+    const headerCandidates = employeeRegistryFieldDefinitions.flatMap((item) => item.candidates);
+    const { records, headers } = await readExcelFile(file, headerCandidates);
+    if (!records.length) {
+      throw new Error('Не удалось обнаружить данные в файле перечня сотрудников.');
+    }
+    state.employeeRegistry = records;
+    state.employeeRegistryColumns = headers;
+    state.employeeRegistryMapping = autoMapColumns(headers, employeeRegistryFieldDefinitions);
+    state.lastTestMatch = null;
+    renderTestMappings();
+    showTestMatchingMessage('Перечень сотрудников загружен. Проверьте соответствие колонок.');
+  } catch (error) {
+    console.error(error);
+    state.employeeRegistry = [];
+    state.employeeRegistryColumns = [];
+    state.employeeRegistryMapping = {};
+    state.lastTestMatch = null;
+    renderTestMappings();
+    const message =
+      error instanceof Error ? error.message : 'Не удалось обработать файл перечня сотрудников. Повторите попытку.';
+    showTestMatchingMessage(message);
+  }
+}
+
+async function loadTestResultsFiles(files, truncated) {
+  try {
+    showTestMatchingMessage('Загрузка файлов с результатами тестов...');
+    const headerCandidates = testResultFieldDefinitions.flatMap((item) => item.candidates);
+    const loadedFiles = [];
+    const failedFiles = [];
+    for (const file of files) {
+      try {
+        const { records, headers } = await readExcelFile(file, headerCandidates);
+        if (!records.length) {
+          failedFiles.push({ name: file.name, reason: 'файл не содержит данных' });
+          continue;
+        }
+        loadedFiles.push({ fileName: file.name, records, headers });
+      } catch (error) {
+        console.error(error);
+        failedFiles.push({
+          name: file.name,
+          reason: error instanceof Error ? error.message : 'не удалось обработать файл',
+        });
+      }
+    }
+    state.testResultFiles = loadedFiles;
+    const uniqueHeaders = [];
+    for (const file of loadedFiles) {
+      for (const header of file.headers ?? []) {
+        if (header !== undefined && header !== null && !uniqueHeaders.includes(header)) {
+          uniqueHeaders.push(header);
+        }
+      }
+    }
+    state.testResultColumns = uniqueHeaders;
+    state.testResultMapping = uniqueHeaders.length
+      ? autoMapColumns(uniqueHeaders, testResultFieldDefinitions)
+      : {};
+    state.lastTestMatch = null;
+    renderTestMappings();
+    let message = '';
+    if (!loadedFiles.length) {
+      if (failedFiles.length) {
+        const failedList = failedFiles.map((item) => `«${item.name}»`).join(', ');
+        message = `Не удалось обработать выбранные файлы: ${failedList}.`;
+      } else {
+        message = 'Не удалось обнаружить данные в выбранных файлах.';
+      }
+    } else {
+      message = `Загружено файлов: ${loadedFiles.length}.`;
+      if (failedFiles.length) {
+        const failedList = failedFiles.map((item) => `«${item.name}»`).join(', ');
+        message += ` Не обработаны: ${failedList}.`;
+      }
+      if (truncated) {
+        message += ' Обработаны первые двенадцать файлов.';
+      }
+      message += ' Проверьте сопоставление колонок перед расчётом.';
+    }
+    showTestMatchingMessage(message);
+  } catch (error) {
+    console.error(error);
+    state.testResultFiles = [];
+    state.testResultColumns = [];
+    state.testResultMapping = {};
+    state.lastTestMatch = null;
+    renderTestMappings();
+    showTestMatchingMessage('Не удалось обработать выбранные файлы. Попробуйте повторить попытку.');
   }
 }
 
@@ -1071,6 +1320,193 @@ function renderMappings() {
       schedulePreviewUpdate();
     });
   }
+}
+
+function renderTestMappings() {
+  if (!elements.employeeRegistryMapping || !elements.testResultsMapping) {
+    updateTestMatchingVisibility();
+    return;
+  }
+  elements.employeeRegistryMapping.innerHTML = '';
+  elements.testResultsMapping.innerHTML = '';
+  ensureMappingKeys(state.employeeRegistryMapping, employeeRegistryFieldDefinitions, state.employeeRegistryColumns);
+  ensureMappingKeys(state.testResultMapping, testResultFieldDefinitions, state.testResultColumns);
+  if (elements.testMappingWrapper) {
+    elements.testMappingWrapper.hidden = !(state.employeeRegistryColumns.length || state.testResultColumns.length);
+  }
+  if (state.employeeRegistryColumns.length) {
+    renderMappingList(
+      elements.employeeRegistryMapping,
+      state.employeeRegistryColumns,
+      employeeRegistryFieldDefinitions,
+      state.employeeRegistryMapping,
+      (key, value) => {
+        state.employeeRegistryMapping[key] = value;
+        state.lastTestMatch = null;
+        updateTestMatchingVisibility();
+      },
+    );
+  }
+  if (state.testResultColumns.length) {
+    renderMappingList(
+      elements.testResultsMapping,
+      state.testResultColumns,
+      testResultFieldDefinitions,
+      state.testResultMapping,
+      (key, value) => {
+        state.testResultMapping[key] = value;
+        state.lastTestMatch = null;
+        updateTestMatchingVisibility();
+      },
+    );
+  }
+  updateTestMatchingVisibility();
+}
+
+function ensureMappingKeys(mapping, definitions, columns) {
+  if (!mapping) {
+    return;
+  }
+  const columnSet = new Set(columns ?? []);
+  for (const definition of definitions) {
+    const currentValue = mapping[definition.key];
+    if (typeof currentValue !== 'string' || !columnSet.has(currentValue)) {
+      mapping[definition.key] = columnSet.has(currentValue) ? currentValue : '';
+    }
+  }
+}
+
+function updateTestMatchingVisibility() {
+  if (elements.testMappingWrapper) {
+    elements.testMappingWrapper.hidden = !(state.employeeRegistryColumns.length || state.testResultColumns.length);
+  }
+  if (elements.processTestResultsButton) {
+    elements.processTestResultsButton.disabled = !canProcessTestResults();
+  }
+  if (elements.downloadTestResultsButton) {
+    elements.downloadTestResultsButton.disabled = !state.lastTestMatch;
+  }
+}
+
+function canProcessTestResults() {
+  if (!state.employeeRegistry.length || !state.testResultFiles.length) {
+    return false;
+  }
+  if (!hasRequiredMapping(state.employeeRegistryMapping, employeeRegistryFieldDefinitions)) {
+    return false;
+  }
+  if (!hasRequiredMapping(state.testResultMapping, testResultFieldDefinitions)) {
+    return false;
+  }
+  return true;
+}
+
+function hasRequiredMapping(mapping, definitions) {
+  if (!mapping) {
+    return false;
+  }
+  for (const definition of definitions) {
+    if (definition.optional) {
+      continue;
+    }
+    const value = mapping[definition.key];
+    if (typeof value !== 'string' || !value.trim()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function processTestResults() {
+  if (!canProcessTestResults()) {
+    showTestMatchingMessage('Загрузите перечень сотрудников и файлы тестов, затем настройте обязательные поля.');
+    return;
+  }
+  const lookup = buildEmployeeLookup(state.employeeRegistry, state.employeeRegistryMapping);
+  if (!lookup.byName.size && !lookup.byId.size) {
+    showTestMatchingMessage('Перечень сотрудников не содержит данных для сопоставления.');
+    state.lastTestMatch = null;
+    updateTestMatchingVisibility();
+    return;
+  }
+  const rows = [];
+  const stats = { total: 0, found: 0, notFound: 0, missing: 0, ambiguous: 0 };
+  const nameColumn = state.testResultMapping.employeeName;
+  const idColumn = state.testResultMapping.employeeId;
+  const testNameColumn = state.testResultMapping.testName;
+  const testResultColumn = state.testResultMapping.testResult;
+  const testScoreColumn = state.testResultMapping.testScore;
+  const testDateColumn = state.testResultMapping.testDate;
+  for (const file of state.testResultFiles) {
+    const records = file.records ?? [];
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      stats.total += 1;
+      const rawName = nameColumn ? record[nameColumn] : '';
+      const rawId = idColumn ? record[idColumn] : '';
+      const normalizedName = normalizePersonKey(rawName);
+      const normalizedId = normalizeIdentifier(rawId);
+      const nameText = getValueAsString(rawName);
+      const idText = getValueAsString(rawId);
+      let matchedRecords = [];
+      let matchMethod = '';
+      if (normalizedId) {
+        const idMatches = lookup.byId.get(normalizedId) ?? [];
+        if (idMatches.length) {
+          matchedRecords = idMatches;
+          matchMethod = 'id';
+        }
+      }
+      if (!matchedRecords.length && normalizedName) {
+        const nameMatches = lookup.byName.get(normalizedName) ?? [];
+        if (nameMatches.length) {
+          matchedRecords = nameMatches;
+          matchMethod = 'name';
+        }
+      }
+      let status = 'Не найден';
+      if (!normalizedName && !normalizedId) {
+        status = 'Не указан сотрудник';
+        stats.missing += 1;
+      } else if (matchedRecords.length === 1) {
+        status = matchMethod === 'id' ? 'Найден (по табельному номеру)' : 'Найден';
+        stats.found += 1;
+      } else if (matchedRecords.length > 1) {
+        status = 'Найдено несколько записей';
+        stats.ambiguous += 1;
+      } else {
+        stats.notFound += 1;
+      }
+      const row = {
+        testFile: file.fileName ?? '',
+        rowNumber: index + 2,
+        testEmployeeName: nameText,
+        testEmployeeId: idText,
+        status,
+        registryName: extractMatchedValue(matchedRecords, state.employeeRegistryMapping, 'employeeName'),
+        registryId: extractMatchedValue(matchedRecords, state.employeeRegistryMapping, 'employeeId'),
+        registryDepartment: extractMatchedValue(matchedRecords, state.employeeRegistryMapping, 'department'),
+        registryPosition: extractMatchedValue(matchedRecords, state.employeeRegistryMapping, 'position'),
+        registryEmail: extractMatchedValue(matchedRecords, state.employeeRegistryMapping, 'email'),
+        testName: testNameColumn ? getValueAsString(record[testNameColumn]) : '',
+        testResult: testResultColumn ? getValueAsString(record[testResultColumn]) : '',
+        testScore: testScoreColumn ? getValueAsString(record[testScoreColumn]) : '',
+        testDate: testDateColumn ? formatTestDateValue(record[testDateColumn]) : '',
+      };
+      rows.push(row);
+    }
+  }
+  if (!rows.length) {
+    showTestMatchingMessage('В выбранных файлах не найдено записей для обработки.');
+    state.lastTestMatch = null;
+    updateTestMatchingVisibility();
+    return;
+  }
+  state.lastTestMatch = { rows, stats };
+  showTestMatchingMessage(
+    `Всего записей: ${stats.total}. Найдено: ${stats.found}. Не найдено: ${stats.notFound}. Без указания сотрудника: ${stats.missing}. С несколькими совпадениями: ${stats.ambiguous}.`,
+  );
+  updateTestMatchingVisibility();
 }
 
 /**
@@ -2334,6 +2770,13 @@ function showPreviewMessage(message) {
   elements.previewMessage.textContent = message;
 }
 
+function showTestMatchingMessage(message) {
+  if (!elements.testMatchingMessage) {
+    return;
+  }
+  elements.testMatchingMessage.textContent = message;
+}
+
 /**
  * Проверяет, что значение является корректным объектом Date.
  *
@@ -2471,6 +2914,91 @@ function getValueAsString(value) {
     return formatDateDisplay(value);
   }
   return value.toString().trim();
+}
+
+function buildEmployeeLookup(records, mapping) {
+  const byName = new Map();
+  const byId = new Map();
+  if (!Array.isArray(records) || !mapping) {
+    return { byName, byId };
+  }
+  const nameColumn = mapping.employeeName;
+  const idColumn = mapping.employeeId;
+  for (const record of records) {
+    if (!record || typeof record !== 'object') {
+      continue;
+    }
+    if (nameColumn) {
+      const key = normalizePersonKey(record[nameColumn]);
+      if (key) {
+        const list = byName.get(key) ?? [];
+        list.push(record);
+        byName.set(key, list);
+      }
+    }
+    if (idColumn) {
+      const key = normalizeIdentifier(record[idColumn]);
+      if (key) {
+        const list = byId.get(key) ?? [];
+        list.push(record);
+        byId.set(key, list);
+      }
+    }
+  }
+  return { byName, byId };
+}
+
+function extractMatchedValue(records, mapping, key) {
+  if (!Array.isArray(records) || !mapping) {
+    return '';
+  }
+  const column = mapping[key];
+  if (!column) {
+    return '';
+  }
+  const values = [];
+  for (const record of records) {
+    if (!record || typeof record !== 'object') {
+      continue;
+    }
+    const text = getValueAsString(record[column]);
+    if (!text) {
+      continue;
+    }
+    if (!values.includes(text)) {
+      values.push(text);
+    }
+  }
+  return values.join('; ');
+}
+
+function normalizePersonKey(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const text = value instanceof Date ? formatDateDisplay(value) : value.toString();
+  return text
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, 'е');
+}
+
+function normalizeIdentifier(value) {
+  const text = getValueAsString(value);
+  if (!text) {
+    return '';
+  }
+  return text.replace(/\s+/g, '').toLowerCase();
+}
+
+function formatTestDateValue(value) {
+  const date = parseDateValue(value);
+  if (date) {
+    return formatDateDisplay(date);
+  }
+  return getValueAsString(value);
 }
 
 /**
@@ -2707,6 +3235,69 @@ function formatPercent(value) {
     return '0';
   }
   return value.toFixed(1);
+}
+
+function exportTestMatchesToExcel(matchResult) {
+  try {
+    const headers = [
+      'Файл теста',
+      'Строка в файле',
+      'ФИО из теста',
+      'Табельный номер из теста',
+      'Статус сопоставления',
+      'ФИО в перечне',
+      'Табельный номер в перечне',
+      'Подразделение',
+      'Должность',
+      'Электронная почта',
+      'Название теста',
+      'Результат',
+      'Баллы/процент',
+      'Дата теста',
+    ];
+    const aoa = [];
+    if (matchResult?.stats) {
+      const { total = 0, found = 0, notFound = 0, missing = 0, ambiguous = 0 } = matchResult.stats;
+      aoa.push(['Всего записей', total]);
+      aoa.push(['Найдено', found]);
+      aoa.push(['Не найдено', notFound]);
+      aoa.push(['Без указания сотрудника', missing]);
+      aoa.push(['Найдено несколько записей', ambiguous]);
+      aoa.push([]);
+    }
+    aoa.push(headers);
+    for (const row of matchResult?.rows ?? []) {
+      aoa.push([
+        row.testFile ?? '',
+        row.rowNumber ?? '',
+        row.testEmployeeName ?? '',
+        row.testEmployeeId ?? '',
+        row.status ?? '',
+        row.registryName ?? '',
+        row.registryId ?? '',
+        row.registryDepartment ?? '',
+        row.registryPosition ?? '',
+        row.registryEmail ?? '',
+        row.testName ?? '',
+        row.testResult ?? '',
+        row.testScore ?? '',
+        row.testDate ?? '',
+      ]);
+    }
+    const sheet = XLSX.utils.aoa_to_sheet(aoa);
+    const columnWidths = [24, 14, 32, 18, 28, 32, 20, 26, 24, 28, 28, 20, 18, 18];
+    sheet['!cols'] = columnWidths.map((width) => ({ wch: width }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Сверка');
+    const now = new Date();
+    const iso = formatIsoDate(now);
+    const suffix = iso ? iso.replace(/-/g, '.') : formatDateDisplay(now) || 'отчёт';
+    const fileName = `Сверка тестов ${suffix}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  } catch (error) {
+    console.error('Не удалось выгрузить сверку тестов.', error);
+    showTestMatchingMessage('Не удалось выгрузить сверку. Попробуйте повторить позже.');
+  }
 }
 
 /**

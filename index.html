@@ -341,6 +341,50 @@
         </div>
       </section>
 
+      <section class="card" id="test-matching-section">
+        <h2>5. Сверка результатов тестирования</h2>
+        <p class="hint">
+          Загрузите перечень сотрудников и до двенадцати файлов с результатами тестов. Приложение сопоставит участников и
+          подготовит Excel с найденными и ненайденными сотрудниками для ручной проверки.
+        </p>
+        <div class="file-input-group">
+          <label for="employee-registry-file" class="file-label">Перечень сотрудников (Excel)</label>
+          <div class="file-input-control">
+            <input type="file" id="employee-registry-file" accept=".xlsx,.xls" />
+            <div class="file-loader" id="employee-registry-loader" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="file-loader__text">Обработка…</span>
+            </div>
+          </div>
+        </div>
+        <div class="file-input-group">
+          <label for="test-results-files" class="file-label">Результаты тестов (Excel, до 12 файлов одновременно)</label>
+          <div class="file-input-control">
+            <input type="file" id="test-results-files" accept=".xlsx,.xls" multiple />
+            <div class="file-loader" id="test-results-loader" role="status" aria-live="polite" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="file-loader__text">Обработка…</span>
+            </div>
+          </div>
+          <p class="hint">Если выбрать больше двенадцати файлов, будут обработаны первые двенадцать.</p>
+        </div>
+        <div id="test-mapping-wrapper" class="mapping-grid" hidden>
+          <div>
+            <h3>Перечень сотрудников</h3>
+            <div id="employee-registry-mapping" class="mapping-list"></div>
+          </div>
+          <div>
+            <h3>Результаты тестов</h3>
+            <div id="test-results-mapping" class="mapping-list"></div>
+          </div>
+        </div>
+        <div class="test-actions">
+          <button id="process-test-results" type="button" disabled>Сформировать сверку</button>
+          <button id="download-test-results" type="button" disabled>Скачать результат</button>
+        </div>
+        <p id="test-matching-message" class="hint" role="status" aria-live="polite"></p>
+      </section>
+
       <section class="card card--support" aria-labelledby="support-title">
         <div class="card__header">
           <h2 id="support-title">Полезные контакты и материалы</h2>

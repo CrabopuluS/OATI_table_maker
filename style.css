@@ -1551,6 +1551,51 @@ button {
   color: var(--button-outline-disabled-text);
 }
 
+.test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+}
+
+#process-test-results {
+  background: var(--brand-primary);
+  color: var(--button-primary-text);
+  padding: 0.6rem 1.5rem;
+  box-shadow: 0 16px 32px -22px rgba(var(--brand-primary-rgb), 0.45);
+}
+
+#process-test-results:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px -18px rgba(var(--brand-primary-rgb), 0.55);
+  background: var(--brand-primary-dark);
+}
+
+#process-test-results:disabled {
+  cursor: not-allowed;
+  background: var(--border-soft);
+  color: var(--button-outline-disabled-text);
+  box-shadow: none;
+}
+
+#download-test-results {
+  padding: 0.6rem 1.5rem;
+  background: transparent;
+  color: var(--button-outline-color);
+  border: 1px solid var(--button-outline-color);
+}
+
+#download-test-results:hover:not(:disabled) {
+  background: var(--brand-primary);
+  color: var(--button-primary-text);
+}
+
+#download-test-results:disabled {
+  cursor: not-allowed;
+  border-color: var(--button-outline-disabled);
+  color: var(--button-outline-disabled-text);
+}
+
 .table-wrapper {
   overflow-x: auto;
   margin-top: 1.1rem;
