@@ -2351,6 +2351,8 @@ function validateBulkRule(rule) {
 
 function syncBulkExportRulesWithAvailableOptions() {
   if (!state.bulkExportRules.length) {
+    renderBulkExportRules();
+    syncBulkExportPeriodsWithAvailability();
     return;
   }
   const typeSet = new Set(state.availableTypes);
@@ -2396,8 +2398,16 @@ function closeBulkExportOverlay() {
   }
   elements.bulkExportOverlay.hidden = true;
   document.body.classList.remove('no-scroll');
-  if (elements.openBulkExportButton) {
-    elements.openBulkExportButton.focus();
+  const trigger = elements.openBulkExportButton;
+  if (trigger instanceof HTMLElement) {
+    const isHidden = trigger.hasAttribute('hidden') || Boolean(trigger.closest('[hidden]'));
+    if (!isHidden) {
+      try {
+        trigger.focus();
+      } catch (error) {
+        console.warn('Не удалось вернуть фокус к кнопке открытия массовой выгрузки.', error);
+      }
+    }
   }
 }
 
