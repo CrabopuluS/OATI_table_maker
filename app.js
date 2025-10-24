@@ -4076,6 +4076,36 @@ function buildViolationSelectionDescription(context = resolveReportContext()) {
 }
 
 /**
+ * Возвращает описание выбранных типов объектов для заголовка Excel.
+ *
+ * @param {{typeMode: string, customTypes: Array<string>}} context Контекст отчёта.
+ * @returns {string} Текст для подстановки в заголовок.
+ */
+function describeTypeSelectionForTitle(context = resolveReportContext()) {
+  if (context.typeMode !== 'custom' || !Array.isArray(context.customTypes) || !context.customTypes.length) {
+    return 'ОДХ';
+  }
+  const uniqueTypes = [];
+  const seen = new Set();
+  for (const value of context.customTypes) {
+    const text = getValueAsString(value);
+    const key = normalizeKey(text);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueTypes.push(text);
+  }
+  if (!uniqueTypes.length) {
+    return 'ОДХ';
+  }
+  if (uniqueTypes.length === 1) {
+    return uniqueTypes[0];
+  }
+  return uniqueTypes.join(', ');
+}
+
+/**
  * Собирает заголовок листа Excel с учётом выбранного периода и источника данных.
  *
  * @param {{current?: {start: Date, end: Date}}} periods Выбранные периоды.
@@ -4084,7 +4114,8 @@ function buildViolationSelectionDescription(context = resolveReportContext()) {
 function buildExcelTitle(periods, context = resolveReportContext(), options = {}) {
   const { titlePrefix } = options;
   const periodRange = formatTitlePeriod(periods?.current);
-  const parts = [titlePrefix || 'Нарушения на ОДХ'];
+  const defaultPrefix = `Нарушения на ${describeTypeSelectionForTitle(context)}`;
+  const parts = [titlePrefix || defaultPrefix];
   if (periodRange) {
     parts[0] += ` (отчёт за ${periodRange})`;
   }
