@@ -141,6 +141,7 @@ const state = {
     previousStart: '',
     previousEnd: '',
   },
+  bulkExportSearch: {},
 };
 
 function resolveReportContext(overrides = {}) {
@@ -1751,6 +1752,7 @@ function addBulkExportRule() {
     return;
   }
   const rule = createDefaultBulkExportRule();
+  ensureBulkExportSearchState(rule.id);
   state.bulkExportRules = [...state.bulkExportRules, rule];
   saveBulkExportRulesToStorage();
   renderBulkExportRules();
@@ -1763,6 +1765,7 @@ function deleteBulkExportRule(ruleId) {
     return;
   }
   state.bulkExportRules = next;
+  delete state.bulkExportSearch[ruleId];
   saveBulkExportRulesToStorage();
   renderBulkExportRules();
   setBulkExportMessage('Правило удалено.');
@@ -1814,6 +1817,7 @@ function renderBulkExportRules() {
     container.append(empty);
   } else {
     state.bulkExportRules.forEach((rule, index) => {
+      ensureBulkExportSearchState(rule.id);
       container.append(createBulkExportRuleElement(rule, index));
     });
   }
@@ -1942,7 +1946,6 @@ function createSharedDateInput(key, label) {
     input.min = availableRange.min;
     input.max = availableRange.max;
   }
-  input.disabled = !state.availableDates.length;
   input.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
@@ -2068,6 +2071,131 @@ function deriveAvailableDateRange() {
   return { min: first, max: last };
 }
 
+function formatRuPlural(count, form1, form2, form5) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return form1;
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+    return form2;
+  }
+  return form5;
+}
+
+function normalizeSearchValue(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+function ensureBulkExportSearchState(ruleId) {
+  if (!state.bulkExportSearch[ruleId]) {
+    state.bulkExportSearch[ruleId] = { types: '', violations: '' };
+  } else {
+    const current = state.bulkExportSearch[ruleId];
+    if (typeof current.types !== 'string') {
+      current.types = '';
+    }
+    if (typeof current.violations !== 'string') {
+      current.violations = '';
+    }
+  }
+  return state.bulkExportSearch[ruleId];
+}
+
+function createBulkExportSelectionSummary(values, emptyText, forms) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'bulk-export-selection';
+  if (!values.length) {
+    wrapper.classList.add('bulk-export-selection--empty');
+    const caption = document.createElement('span');
+    caption.className = 'bulk-export-selection__caption';
+    caption.textContent = emptyText;
+    wrapper.append(caption);
+    return wrapper;
+  }
+  const caption = document.createElement('span');
+  caption.className = 'bulk-export-selection__caption';
+  const plural = formatRuPlural(values.length, forms[0], forms[1], forms[2]);
+  caption.textContent = `Выбрано ${values.length} ${plural}`;
+  wrapper.append(caption);
+
+  const chips = document.createElement('div');
+  chips.className = 'bulk-export-chips';
+  values.forEach((value) => {
+    const chip = document.createElement('span');
+    chip.className = 'bulk-export-chip';
+    chip.textContent = value;
+    chips.append(chip);
+  });
+  wrapper.append(chips);
+  return wrapper;
+}
+
+function createBulkExportSearchControl({ ruleId, key, optionsWrapper, placeholder, emptyMessage }) {
+  const searchState = ensureBulkExportSearchState(ruleId);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'bulk-export-search';
+
+  const icon = document.createElement('span');
+  icon.className = 'bulk-export-search__icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '🔍';
+
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.className = 'bulk-export-search__input';
+  input.placeholder = placeholder;
+  input.setAttribute('aria-label', placeholder);
+  input.value = typeof searchState[key] === 'string' ? searchState[key] : '';
+
+  const clearButton = document.createElement('button');
+  clearButton.type = 'button';
+  clearButton.className = 'bulk-export-search__clear';
+  clearButton.textContent = 'Очистить';
+  clearButton.setAttribute('aria-label', 'Очистить поиск');
+
+  const emptyIndicator = document.createElement('p');
+  emptyIndicator.className = 'bulk-export-search__empty';
+  emptyIndicator.textContent = emptyMessage;
+  emptyIndicator.hidden = true;
+
+  const applyFilter = () => {
+    const term = normalizeSearchValue(input.value);
+    searchState[key] = input.value;
+    let matchCount = 0;
+    const options = optionsWrapper.querySelectorAll('.bulk-export-option');
+    options.forEach((option) => {
+      const value = option.dataset.searchValue ?? '';
+      const isMatch = !term || value.includes(term);
+      option.hidden = !isMatch;
+      if (isMatch) {
+        matchCount += 1;
+      }
+    });
+    emptyIndicator.hidden = matchCount > 0;
+    clearButton.hidden = term.length === 0;
+  };
+
+  input.addEventListener('input', applyFilter);
+  input.addEventListener('search', applyFilter);
+  clearButton.addEventListener('click', () => {
+    if (!input.value) {
+      return;
+    }
+    input.value = '';
+    searchState[key] = '';
+    applyFilter();
+    input.focus();
+  });
+
+  wrapper.append(icon, input, clearButton);
+  applyFilter();
+
+  return { wrapper, emptyIndicator, applyFilter };
+}
+
 function createTypeFieldset(rule) {
   const fieldset = document.createElement('fieldset');
   fieldset.className = 'bulk-export-fieldset';
@@ -2113,13 +2241,22 @@ function createTypeFieldset(rule) {
     return fieldset;
   }
 
+  const selected = new Set(rule.customTypes);
+  fieldset.append(
+    createBulkExportSelectionSummary(
+      rule.customTypes,
+      'Вы пока не выбрали типы объектов.',
+      ['тип', 'типа', 'типов'],
+    ),
+  );
+
   const optionsWrapper = document.createElement('div');
   optionsWrapper.className = 'bulk-export-options';
-  const selected = new Set(rule.customTypes);
   const limitReached = rule.customTypes.length >= 3;
   for (const value of state.availableTypes) {
     const optionLabel = document.createElement('label');
     optionLabel.className = 'bulk-export-option';
+    optionLabel.dataset.searchValue = normalizeSearchValue(value);
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.value = value;
@@ -2152,11 +2289,21 @@ function createTypeFieldset(rule) {
     optionLabel.append(input, text);
     optionsWrapper.append(optionLabel);
   }
+
+  const searchControls = createBulkExportSearchControl({
+    ruleId: rule.id,
+    key: 'types',
+    optionsWrapper,
+    placeholder: 'Поиск по типам объектов',
+    emptyMessage: 'Совпадений не найдено. Попробуйте изменить запрос.',
+  });
+  fieldset.append(searchControls.wrapper);
   fieldset.append(optionsWrapper);
+  fieldset.append(searchControls.emptyIndicator);
 
   const note = document.createElement('p');
   note.className = 'bulk-export-note';
-  note.textContent = 'Можно выбрать не более трех типов объектов.';
+  note.textContent = `Можно выбрать не более трех типов объектов. Выбрано: ${rule.customTypes.length}.`;
   fieldset.append(note);
 
   return fieldset;
@@ -2207,13 +2354,22 @@ function createViolationFieldset(rule) {
     return fieldset;
   }
 
+  const selected = new Set(rule.customViolations);
+  fieldset.append(
+    createBulkExportSelectionSummary(
+      rule.customViolations,
+      'Вы пока не выбрали наименования нарушений.',
+      ['наименование', 'наименования', 'наименований'],
+    ),
+  );
+
   const optionsWrapper = document.createElement('div');
   optionsWrapper.className = 'bulk-export-options';
-  const selected = new Set(rule.customViolations);
   const limitReached = rule.customViolations.length >= 5;
   for (const value of state.availableViolations) {
     const optionLabel = document.createElement('label');
     optionLabel.className = 'bulk-export-option';
+    optionLabel.dataset.searchValue = normalizeSearchValue(value);
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.value = value;
@@ -2246,11 +2402,21 @@ function createViolationFieldset(rule) {
     optionLabel.append(input, text);
     optionsWrapper.append(optionLabel);
   }
+
+  const searchControls = createBulkExportSearchControl({
+    ruleId: rule.id,
+    key: 'violations',
+    optionsWrapper,
+    placeholder: 'Поиск по наименованиям нарушений',
+    emptyMessage: 'Совпадений не найдено. Скорректируйте поисковый запрос.',
+  });
+  fieldset.append(searchControls.wrapper);
   fieldset.append(optionsWrapper);
+  fieldset.append(searchControls.emptyIndicator);
 
   const note = document.createElement('p');
   note.className = 'bulk-export-note';
-  note.textContent = 'Можно выбрать не более пяти наименований нарушений.';
+  note.textContent = `Можно выбрать не более пяти наименований нарушений. Выбрано: ${rule.customViolations.length}.`;
   fieldset.append(note);
 
   return fieldset;
@@ -2351,6 +2517,8 @@ function validateBulkRule(rule) {
 
 function syncBulkExportRulesWithAvailableOptions() {
   if (!state.bulkExportRules.length) {
+    renderBulkExportRules();
+    syncBulkExportPeriodsWithAvailability();
     return;
   }
   const typeSet = new Set(state.availableTypes);
@@ -2396,8 +2564,16 @@ function closeBulkExportOverlay() {
   }
   elements.bulkExportOverlay.hidden = true;
   document.body.classList.remove('no-scroll');
-  if (elements.openBulkExportButton) {
-    elements.openBulkExportButton.focus();
+  const trigger = elements.openBulkExportButton;
+  if (trigger instanceof HTMLElement) {
+    const isHidden = trigger.hasAttribute('hidden') || Boolean(trigger.closest('[hidden]'));
+    if (!isHidden) {
+      try {
+        trigger.focus();
+      } catch (error) {
+        console.warn('Не удалось вернуть фокус к кнопке открытия массовой выгрузки.', error);
+      }
+    }
   }
 }
 
@@ -2489,8 +2665,10 @@ function buildBulkExportFileName() {
 }
 
 function initializeBulkExportFeature() {
+  state.bulkExportSearch = {};
   state.bulkExportRules = loadBulkExportRulesFromStorage();
   state.bulkExportPeriods = loadBulkExportPeriodsFromStorage();
+  state.bulkExportRules.forEach((rule) => ensureBulkExportSearchState(rule.id));
   renderBulkExportRules();
   syncBulkExportPeriodsWithAvailability();
   if (elements.bulkExportOverlay) {
