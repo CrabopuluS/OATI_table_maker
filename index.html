@@ -3,387 +3,271 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Конструктор отчетных таблиц ОАТИ</title>
+  <title>Feline Vitae — Архив здоровья котов</title>
   <link rel="icon" type="image/svg+xml" href="дизайн/ЛОГО.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="app.js" type="module" defer></script>
 </head>
-<body class="theme-dark" data-theme="dark">
-  <div class="app-background" aria-hidden="true">
-    <span class="app-background__orb app-background__orb--primary"></span>
-    <span class="app-background__orb app-background__orb--accent"></span>
-    <span class="app-background__grid"></span>
-  </div>
-  <div class="app-shell">
-    <header class="app-header">
-      <div class="header-top">
-        <div class="header-brand">
-          <img src="дизайн/ЛОГО.svg" alt="Логотип Контроль Москвы" class="brand-logo" />
-          <div class="brand-text">
-            <span class="brand-tag">Контроль Москвы</span>
-            <h1>Конструктор отчетных таблиц ОАТИ</h1>
-          </div>
+<body>
+  <div class="page-shell">
+    <div class="background-texture" aria-hidden="true"></div>
+    <header class="page-header" role="banner">
+      <div class="brand-group">
+        <div class="brand-emblem" aria-hidden="true">
+          <span class="brand-emblem__ring"></span>
+          <span class="brand-emblem__crest">FV</span>
         </div>
-        <div class="header-actions">
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="true">
-            <span class="theme-toggle__glow" aria-hidden="true"></span>
-            <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true"></span>
-            <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true"></span>
-            <span class="theme-toggle__label" id="theme-toggle-text">Светлый режим</span>
-          </button>
+        <div class="brand-copy">
+          <p class="brand-copy__tagline">Feline Vitae</p>
+          <h1 class="brand-copy__title">Архив здоровья ваших котов</h1>
+          <p class="brand-copy__subtitle">
+            Безупречное хранение ветеринарных документов, результатов анализов и рекомендаций специалистов. Всё располагается
+            локально, в пределах вашего устройства, под полным контролем владельца.
+          </p>
         </div>
       </div>
-      <div class="easter-egg" id="easter-egg-message" role="status" aria-live="polite" hidden>
-        Разработано Русланом Мирвеловым
+      <div class="header-actions">
+        <button class="button button--outline" id="security-briefing" type="button">Памятка по безопасности</button>
+        <button class="button" id="open-admin" type="button">Администрирование</button>
       </div>
-      <p class="header-subtitle">
-        Единая рабочая среда для формирования отчетов: загрузите исходные данные, сопоставьте поля и получите сверстанный файл
-        за несколько кликов.
-      </p>
-      <nav class="process-map" aria-label="Как построить отчет">
-        <ol class="process-map__list">
-          <li class="process-map__item">
-            <span class="process-map__number">1</span>
-            <span class="process-map__text">Загрузите исходные Excel-файлы</span>
-          </li>
-          <li class="process-map__item">
-            <span class="process-map__number">2</span>
-            <span class="process-map__text">Проверьте соответствие столбцов</span>
-          </li>
-          <li class="process-map__item">
-            <span class="process-map__number">3</span>
-            <span class="process-map__text">Настройте фильтры и период</span>
-          </li>
-          <li class="process-map__item">
-            <span class="process-map__number">4</span>
-            <span class="process-map__text">Скачайте готовый отчет</span>
-          </li>
-        </ol>
-      </nav>
     </header>
 
-    <aside class="credit-badge" aria-label="Информация о разработчиках">
-      <span class="credit-badge__title">Разработано</span>
-      <span class="credit-badge__body"
-        >Отделом развития информационных систем и внедрения цифровых продуктов Информационно-аналитического управления</span
-      >
-      <button class="credit-badge__close" type="button" aria-label="Скрыть плашку с информацией о разработчиках">
-        Ничего себе!
-      </button>
-    </aside>
-
-    <main class="app-main">
-      <section class="card card--guide" aria-labelledby="quick-guide-title">
-        <div class="card__header">
-          <h2 id="quick-guide-title">Быстрый навигатор</h2>
-          <p class="card__subtitle">Перед началом убедитесь, что исходные таблицы соответствуют методике из «Правил формирования данных».</p>
-        </div>
-        <ol class="guide-list">
-          <li>
-            <span class="guide-list__title">Подготовьте исходные Excel-файлы</span>
-            <span class="guide-list__details">
-              Приложение принимает выгрузки форматов <code>.xlsx</code> и <code>.xls</code> с единственным листом, где первая строка — заголовки без объединений.
-            </span>
-            <ul class="guide-sublist">
-              <li>В таблице нарушений должны быть дата обследования, статус и наименование нарушения.</li>
-              <li>В справочнике объектов рекомендуется указывать <abbr title="уникальный идентификатор">ID</abbr>, название и округ.</li>
-            </ul>
-          </li>
-          <li>
-            <span class="guide-list__title">Загрузите выгрузки и дождитесь обработки</span>
-            <span class="guide-list__details">
-              После выбора файла индикатор прогресса покажет ход чтения. Данные обрабатываются локально в браузере.
-            </span>
-            <ul class="guide-sublist">
-              <li>Приложение автоматически определяет строку заголовков и типы столбцов.</li>
-              <li>Ошибки парсинга отображаются в области предпросмотра.</li>
-            </ul>
-          </li>
-          <li>
-            <span class="guide-list__title">Проверьте сопоставление столбцов</span>
-            <span class="guide-list__details">
-              Секция «Настройка соответствия» предлагает автоматически подобранные поля. Их можно скорректировать вручную.
-            </span>
-            <ul class="guide-sublist">
-              <li>Для уникальной идентификации используются ID объектов или нормализованные названия.</li>
-              <li>Дополнительные столбцы, такие как источник данных, подключаются по мере наличия.</li>
-            </ul>
-          </li>
-          <li>
-            <span class="guide-list__title">Настройте фильтры отчёта</span>
-            <span class="guide-list__details">
-              Доступны выбор периодов, типы объектов и нарушений, фильтр по источнику и объединение округов ТиНАО.
-            </span>
-            <ul class="guide-sublist">
-              <li>Пользовательские списки типов и нарушений ограничивают расчёт только выбранными значениями.</li>
-              <li>При включении объединения округа ТиНАО считаются единой строкой.</li>
-            </ul>
-          </li>
-          <li>
-            <span class="guide-list__title">Сформируйте и выгрузите результат</span>
-            <span class="guide-list__details">
-              Раздел «Предпросмотр» покажет агрегированную таблицу по округам. После пересчёта доступна выгрузка в Excel.
-            </span>
-            <ul class="guide-sublist">
-              <li>Кнопка «Пересчитать» обновляет таблицу после изменения фильтров.</li>
-              <li>Экспорт сохраняет фирменное оформление и формат чисел.</li>
-            </ul>
-          </li>
-        </ol>
-      </section>
-
-      <section class="card">
-        <h2>1. Загрузка исходных данных</h2>
-        <div class="file-input-group">
-          <label for="violations-file" class="file-label">Таблица по нарушениям (Excel)</label>
-          <div class="file-input-control">
-            <input type="file" id="violations-file" accept=".xlsx,.xls" />
-            <div class="file-loader" id="violations-loader" role="status" aria-live="polite" hidden>
-              <span class="spinner" aria-hidden="true"></span>
-              <span class="file-loader__text">Обработка…</span>
-            </div>
-          </div>
-        </div>
-        <div class="file-input-group">
-          <label for="objects-file" class="file-label">Таблица по объектам (Excel)</label>
-          <div class="file-input-control">
-            <input type="file" id="objects-file" accept=".xlsx,.xls" />
-            <div class="file-loader" id="objects-loader" role="status" aria-live="polite" hidden>
-              <span class="spinner" aria-hidden="true"></span>
-              <span class="file-loader__text">Обработка…</span>
-            </div>
-          </div>
-        </div>
-        <p class="hint">Файлы обрабатываются только в браузере, без отправки на сервер.</p>
-      </section>
-
-      <section class="card" id="mapping-section" hidden>
-        <h2>2. Настройка соответствия столбцов</h2>
-        <div class="mapping-grid">
+    <main class="page-main" id="main" tabindex="-1">
+      <section class="section section--hero" aria-labelledby="hero-title">
+        <div class="hero-panel">
           <div>
-            <h3>Таблица нарушений</h3>
-            <div id="violations-mapping" class="mapping-list"></div>
+            <h2 id="hero-title">Цифровой каталог ветеринарных документов</h2>
+            <p>
+              Система Feline Vitae помогает мгновенно находить историю посещений клиник, хранить результаты обследований и
+              подтверждающие документы. Выберите питомца, изучите его досье и выгрузите нужные файлы без задержек.
+            </p>
           </div>
-          <div>
-            <h3>Перечень объектов</h3>
-            <div id="objects-mapping" class="mapping-list"></div>
-          </div>
+          <dl class="hero-statistics">
+            <div>
+              <dt>Активные питомцы</dt>
+              <dd id="hero-cats-count">0</dd>
+            </div>
+            <div>
+              <dt>Документов в архиве</dt>
+              <dd id="hero-docs-count">0</dd>
+            </div>
+            <div>
+              <dt>Последнее обновление</dt>
+              <dd id="hero-last-update">—</dd>
+            </div>
+          </dl>
         </div>
-        <p class="hint">Проверьте, что для каждого требуемого поля выбран корректный столбец. Значения подставляются автоматически, но их можно изменить.</p>
       </section>
 
-      <section class="card" id="controls-section" hidden>
-        <h2>3. Параметры отчета</h2>
-        <div class="controls-grid">
-          <fieldset class="period-card period-card--current">
-            <legend>Отчетный период</legend>
-            <div class="period-card__header">
-              <span class="period-card__badge">Текущий анализ</span>
-              <p class="period-card__description">Сформируйте основу отчета, выбрав фактический диапазон.</p>
-            </div>
-            <div class="period-card__controls">
-              <label class="fancy-select fancy-date-picker">
-                <span class="fancy-select__label">Начало периода</span>
-                <div class="date-picker" data-picker="current-start">
-                  <input type="hidden" id="current-start" />
-                  <button
-                    type="button"
-                    class="date-picker__button"
-                    id="current-start-trigger"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                  >
-                    <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
-                    <span class="date-picker__icon" aria-hidden="true"></span>
-                  </button>
-                  <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
-                </div>
-              </label>
-              <label class="fancy-select fancy-date-picker">
-                <span class="fancy-select__label">Конец периода</span>
-                <div class="date-picker" data-picker="current-end">
-                  <input type="hidden" id="current-end" />
-                  <button
-                    type="button"
-                    class="date-picker__button"
-                    id="current-end-trigger"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                  >
-                    <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
-                    <span class="date-picker__icon" aria-hidden="true"></span>
-                  </button>
-                  <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
-                </div>
-              </label>
-            </div>
-          </fieldset>
-          <fieldset class="period-card period-card--previous">
-            <legend>Предыдущий период</legend>
-            <div class="period-card__header">
-              <span class="period-card__badge">Сравнительный фон</span>
-              <p class="period-card__description">Подберите интервал для сопоставления динамики.</p>
-            </div>
-            <div class="period-card__controls">
-              <label class="fancy-select fancy-date-picker">
-                <span class="fancy-select__label">Начало периода</span>
-                <div class="date-picker" data-picker="previous-start">
-                  <input type="hidden" id="previous-start" />
-                  <button
-                    type="button"
-                    class="date-picker__button"
-                    id="previous-start-trigger"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                  >
-                    <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
-                    <span class="date-picker__icon" aria-hidden="true"></span>
-                  </button>
-                  <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
-                </div>
-              </label>
-              <label class="fancy-select fancy-date-picker">
-                <span class="fancy-select__label">Конец периода</span>
-                <div class="date-picker" data-picker="previous-end">
-                  <input type="hidden" id="previous-end" />
-                  <button
-                    type="button"
-                    class="date-picker__button"
-                    id="previous-end-trigger"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                  >
-                    <span class="date-picker__value" data-placeholder="— Выберите дату —">— Выберите дату —</span>
-                    <span class="date-picker__icon" aria-hidden="true"></span>
-                  </button>
-                  <div class="date-picker__dropdown" role="dialog" aria-modal="true" hidden></div>
-                </div>
-              </label>
-            </div>
-          </fieldset>
-          <fieldset class="choice-card">
-            <legend>Типы объектов контроля</legend>
-            <div class="choice-card__modes">
-              <label class="inline-option">
-                <input type="radio" name="type-mode" value="all" checked />
-                <span class="inline-option__decor" aria-hidden="true"></span>
-                <span class="inline-option__text">Все типы объектов</span>
-              </label>
-              <label class="inline-option">
-                <input type="radio" name="type-mode" value="custom" />
-                <span class="inline-option__decor" aria-hidden="true"></span>
-                <span class="inline-option__text">Выбрать до трех типов</span>
-              </label>
-            </div>
-            <div id="type-options" class="multi-select-root" aria-live="polite"></div>
-            <p id="type-message" class="hint" role="status" aria-live="polite"></p>
-          </fieldset>
-          <fieldset class="choice-card">
-            <legend>Наименования нарушений</legend>
-            <div class="choice-card__modes">
-              <label class="inline-option">
-                <input type="radio" name="violation-mode" value="all" checked />
-                <span class="inline-option__decor" aria-hidden="true"></span>
-                <span class="inline-option__text">Все наименования</span>
-              </label>
-              <label class="inline-option">
-                <input type="radio" name="violation-mode" value="custom" />
-                <span class="inline-option__decor" aria-hidden="true"></span>
-                <span class="inline-option__text">Выбрать до пяти наименований</span>
-              </label>
-            </div>
-            <div id="violation-options" class="multi-select-root" aria-live="polite"></div>
-            <p id="violation-message" class="hint" role="status" aria-live="polite"></p>
-          </fieldset>
-          <fieldset>
-            <legend>Источник данных</legend>
-            <label>
-              Выбор источника
-              <select id="data-source-filter">
-                <option value="oati">ОАТИ</option>
-                <option value="cafap">ЦАФАП</option>
-                <option value="all" selected>ОАТИ и ЦАФАП</option>
+      <section class="section" aria-labelledby="catalog-title">
+        <div class="section__header">
+          <h2 id="catalog-title">Каталог питомцев</h2>
+          <div class="section__tools">
+            <label class="field field--search" for="cat-search">
+              <span class="field__label">Поиск по имени или породе</span>
+              <input id="cat-search" type="search" name="cat-search" placeholder="Например, Мирабель" autocomplete="off" />
+            </label>
+            <label class="field field--select" for="cat-filter">
+              <span class="field__label">Показать</span>
+              <select id="cat-filter" name="cat-filter">
+                <option value="all">Всех питомцев</option>
+                <option value="active">С документами</option>
+                <option value="archived">Без документов</option>
               </select>
             </label>
-            <p id="data-source-message" class="hint" aria-live="polite"></p>
-          </fieldset>
-          <fieldset class="choice-card">
-            <legend>Настройки округов</legend>
-            <label class="checkbox-row" for="combine-tinao">
-              <input type="checkbox" id="combine-tinao" />
-              <span class="checkbox-row__text">Объединять строки по округам НАО и ТАО в «ТиНАО»</span>
-            </label>
-            <p class="hint">При активации показатели округов НАО и ТАО суммируются и отображаются как «ТиНАО».</p>
-          </fieldset>
-        </div>
-        <p class="hint">При выборе пользовательских типов можно отметить не более трех значений.</p>
-        <p class="hint">Для пользовательского выбора нарушений доступно до пяти наименований.</p>
-      </section>
-
-      <section class="card" id="preview-section" hidden>
-        <div class="preview-header">
-          <h2>4. Предпросмотр отчётной таблицы</h2>
-          <div class="preview-actions">
-            <button id="refresh-report" type="button">Пересчитать</button>
-            <button id="download-report" type="button" disabled>Выгрузить в Excel</button>
           </div>
         </div>
-        <p id="preview-message" class="hint" role="status" aria-live="polite"></p>
-        <div class="table-wrapper">
-          <table id="report-table"></table>
+        <div class="cat-grid" id="cat-grid" role="list"></div>
+        <p class="empty-state" id="cat-empty" hidden>Питомцы не найдены. Измените параметры поиска.</p>
+      </section>
+
+      <section class="section" aria-labelledby="documents-title">
+        <div class="section__header">
+          <div>
+            <h2 id="documents-title">Документы питомца</h2>
+            <p id="documents-subtitle" class="section__subtitle">Выберите питомца, чтобы просмотреть доступные материалы.</p>
+          </div>
+          <div class="section__tools">
+            <label class="field field--search" for="document-search">
+              <span class="field__label">Поиск по документам</span>
+              <input id="document-search" type="search" placeholder="Введите часть названия или описания" autocomplete="off" />
+            </label>
+            <label class="field field--select" for="document-filter">
+              <span class="field__label">Тип файла</span>
+              <select id="document-filter">
+                <option value="all">Все</option>
+                <option value="pdf">PDF</option>
+                <option value="image">Изображения</option>
+                <option value="other">Иные форматы</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="document-table-wrapper">
+          <table class="document-table" aria-describedby="documents-subtitle">
+            <thead>
+              <tr>
+                <th scope="col">Название</th>
+                <th scope="col">Описание</th>
+                <th scope="col">Дата документа</th>
+                <th scope="col">Размер</th>
+                <th scope="col">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="document-table-body"></tbody>
+          </table>
+          <p class="empty-state" id="document-empty" hidden>Загрузите документы через меню администрирования.</p>
         </div>
       </section>
 
-      <section class="card card--support" aria-labelledby="support-title">
-        <div class="card__header">
-          <h2 id="support-title">Полезные контакты и материалы</h2>
-          <p class="card__subtitle">Если при обработке данных возникают вопросы, воспользуйтесь следующими ресурсами.</p>
-        </div>
-        <div class="support-grid">
-          <article class="support-tile">
-            <h3>Методическая поддержка</h3>
-            <p>
-              Методология формирования показателей и контрольные формулы доступны в файлах ниже. Скачайте «Правила расчёта и
-              инструкцию» и используйте их в работе перед подготовкой выгрузок.
-            </p>
-            <div class="support-tile__actions">
-              <a
-                class="support-tile__download"
-                href="Инструкция%20и%20формула%20расчета.txt"
-                download
-                aria-label="Скачать файл Правила расчёта и инструкция"
-              >
-                Скачать инструкцию (TXT)
-              </a>
-              <a
-                class="support-tile__download support-tile__download--outline"
-                href="FORMULAS.md"
-                download
-                aria-label="Скачать файл с контрольными формулами"
-              >
-                Скачать формулы
-              </a>
+      <section class="section section--detail" aria-labelledby="detail-title">
+        <div class="detail-card">
+          <h2 id="detail-title">Досье документа</h2>
+          <dl class="detail-grid" id="document-detail">
+            <div>
+              <dt>Название</dt>
+              <dd>—</dd>
             </div>
-          </article>
-          <article class="support-tile">
-            <h3>Технические вопросы</h3>
-            <p>Свяжитесь с сотрудниками отдела развития информационных систем, передайте пример файлов и опишите проблему — так мы сможем воспроизвести ситуацию.</p>
-          </article>
+            <div>
+              <dt>Дата документа</dt>
+              <dd>—</dd>
+            </div>
+            <div>
+              <dt>Загружено</dt>
+              <dd>—</dd>
+            </div>
+            <div>
+              <dt>Формат</dt>
+              <dd>—</dd>
+            </div>
+            <div class="detail-grid__full">
+              <dt>Описание</dt>
+              <dd>Выберите документ, чтобы увидеть подробности.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="section section--security" aria-labelledby="security-title">
+        <div class="security-card">
+          <h2 id="security-title">Информационная безопасность</h2>
+          <p>
+            Feline Vitae хранит данные исключительно в пределах вашего браузера. Мы рекомендуем регулярно создавать резервные
+            копии архива, использовать надежные пароли на устройстве и шифрование диска. Перед загрузкой файлов убедитесь в
+            отсутствии вредоносного содержимого и сохраняйте только проверенные документы.
+          </p>
         </div>
       </section>
     </main>
 
-    <footer class="app-footer">
-      <p>Формирование отчетов согласно правилам из предоставленных файлов. Все вычисления выполняются локально.</p>
-      <p class="app-footer__note">Версия интерфейса 2.0 · Обновлено автоматически при последнем сохранении настроек.</p>
+    <footer class="page-footer" role="contentinfo">
+      <p>© <span id="footer-year"></span> Feline Vitae. Личная архивная система для заботливых владельцев котов.</p>
     </footer>
   </div>
+
+  <dialog class="modal" id="security-modal" aria-labelledby="security-modal-title">
+    <form method="dialog" class="modal__content">
+      <h2 id="security-modal-title">Памятка по безопасности</h2>
+      <ul class="modal__list">
+        <li>Данные не покидают ваш компьютер. Убедитесь, что доступ к устройству защищен.</li>
+        <li>Шифруйте резервные копии архива и храните их отдельно от основной копии.</li>
+        <li>Используйте проверенные антивирусные решения и обновляйте операционную систему.</li>
+        <li>Перед передачей файла ветеринару проверяйте, что он предназначен именно для этого питомца.</li>
+      </ul>
+      <button class="button" value="cancel" type="submit">Понятно</button>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="admin-modal" aria-labelledby="admin-modal-title">
+    <form method="dialog" class="modal__content modal__content--wide" id="admin-form">
+      <header class="modal__header">
+        <div>
+          <h2 id="admin-modal-title">Администрирование архива</h2>
+          <p class="modal__subtitle">Добавляйте новых питомцев и пополняйте их медицинские карточки.</p>
+        </div>
+        <button class="modal__close" type="button" id="close-admin" aria-label="Закрыть окно"></button>
+      </header>
+
+      <section class="modal-section" aria-labelledby="add-cat-title">
+        <div class="modal-section__header">
+          <h3 id="add-cat-title">Новый питомец</h3>
+          <p>Укажите основные данные, чтобы создать карточку кота.</p>
+        </div>
+        <div class="form-grid">
+          <label class="field" for="cat-name">
+            <span class="field__label">Имя</span>
+            <input id="cat-name" name="cat-name" type="text" maxlength="40" required />
+          </label>
+          <label class="field" for="cat-breed">
+            <span class="field__label">Порода</span>
+            <input id="cat-breed" name="cat-breed" type="text" maxlength="60" />
+          </label>
+          <label class="field" for="cat-birthdate">
+            <span class="field__label">Дата рождения</span>
+            <input id="cat-birthdate" name="cat-birthdate" type="date" />
+          </label>
+          <label class="field" for="cat-color">
+            <span class="field__label">Акцентный цвет</span>
+            <input id="cat-color" name="cat-color" type="color" value="#b69046" />
+          </label>
+        </div>
+        <button class="button" id="create-cat" type="button">Создать карточку</button>
+      </section>
+
+      <section class="modal-section" aria-labelledby="add-document-title">
+        <div class="modal-section__header">
+          <h3 id="add-document-title">Загрузка документа</h3>
+          <p>Выберите кота, к которому относится документ, и заполните карточку файла.</p>
+        </div>
+        <div class="form-grid">
+          <label class="field" for="document-cat">
+            <span class="field__label">Питомец</span>
+            <select id="document-cat" required></select>
+          </label>
+          <label class="field" for="document-title">
+            <span class="field__label">Название документа</span>
+            <input id="document-title" type="text" maxlength="80" required />
+          </label>
+          <label class="field" for="document-date">
+            <span class="field__label">Дата документа</span>
+            <input id="document-date" type="date" required />
+          </label>
+          <label class="field" for="document-file">
+            <span class="field__label">Файл</span>
+            <input id="document-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.doc,.docx,.xlsx,.csv" required />
+          </label>
+          <label class="field field--full" for="document-description">
+            <span class="field__label">Краткое описание</span>
+            <textarea id="document-description" rows="3" maxlength="240" placeholder="Например, результаты биохимического анализа крови"></textarea>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="button" id="upload-document" type="button">Добавить документ</button>
+        </div>
+      </section>
+
+      <section class="modal-section" aria-labelledby="export-title">
+        <div class="modal-section__header">
+          <h3 id="export-title">Резервное копирование</h3>
+          <p>Экспортируйте архив в зашифрованный файл и импортируйте его при необходимости.</p>
+        </div>
+        <div class="backup-grid">
+          <button class="button button--outline" id="export-archive" type="button">Экспортировать архив</button>
+          <label class="button button--outline" for="import-archive">Импортировать архив</label>
+          <input id="import-archive" type="file" accept="application/json" hidden />
+        </div>
+      </section>
+
+      <footer class="modal__footer">
+        <p>Все операции выполняются локально. Не закрывайте окно до завершения загрузки файлов.</p>
+      </footer>
+    </form>
+  </dialog>
 </body>
 </html>
