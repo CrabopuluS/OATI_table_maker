@@ -333,6 +333,7 @@
           <div class="preview-actions">
             <button id="refresh-report" type="button">Пересчитать</button>
             <button id="download-report" type="button" disabled>Выгрузить в Excel</button>
+            <button id="open-bulk-export" type="button">Массовая выгрузка</button>
           </div>
         </div>
         <p id="preview-message" class="hint" role="status" aria-live="polite"></p>
@@ -340,6 +341,49 @@
           <table id="report-table"></table>
         </div>
       </section>
+
+      <div id="bulk-export-overlay" class="bulk-export-overlay" hidden>
+        <div
+          id="bulk-export-panel"
+          class="bulk-export-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-export-title"
+          tabindex="-1"
+        >
+          <div class="bulk-export-panel__header">
+            <h2 id="bulk-export-title">Типовые массовые выгрузки</h2>
+            <button
+              id="close-bulk-export"
+              class="bulk-export-close"
+              type="button"
+              aria-label="Закрыть окно типовых массовых выгрузок"
+            >
+              Закрыть
+            </button>
+          </div>
+          <p class="bulk-export-panel__description">
+            Создайте до двадцати правил массовой выгрузки с индивидуальными фильтрами. Даты отчётных периодов выбираются один
+            раз и применяются ко всем правилам, а каждый отчёт формируется на отдельном листе Excel в составе одного файла.
+          </p>
+          <div id="bulk-export-templates" class="bulk-export-templates" aria-live="polite"></div>
+          <div id="bulk-export-periods" class="bulk-export-periods"></div>
+          <p
+            id="bulk-export-periods-message"
+            class="bulk-export-note"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div id="bulk-export-message" class="bulk-export-message" role="status" aria-live="polite"></div>
+          <div id="bulk-export-rules" class="bulk-export-rules" aria-live="polite"></div>
+          <div class="bulk-export-actions">
+            <button id="add-bulk-export-rule" type="button">Добавить правило</button>
+            <button id="save-bulk-export-template" type="button">Сохранить как шаблон</button>
+            <span class="bulk-export-actions__spacer" aria-hidden="true"></span>
+            <button id="run-bulk-export" type="button">Скачать массовую выгрузку</button>
+          </div>
+        </div>
+      </div>
 
       <section class="card card--support" aria-labelledby="support-title">
         <div class="card__header">
