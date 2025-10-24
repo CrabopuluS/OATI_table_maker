@@ -42,6 +42,10 @@ const TINAO_DISPLAY_LABEL = 'ТиНАО';
 const TINAO_AGGREGATED_KEY = 'тинао';
 const TINAO_COMBINATION_KEYS = new Set([TINAO_AGGREGATED_KEY, 'нао', 'тао']);
 
+const MAX_BULK_EXPORT_RULES = 20;
+const BULK_EXPORT_STORAGE_KEY = 'oati:bulk-export-rules';
+const BULK_EXPORT_PERIODS_STORAGE_KEY = 'oati:bulk-export-periods';
+
 const DISTRICT_SORT_ORDER = new Map([
   ['итого', 0],
   ['цао', 1],
@@ -130,7 +134,32 @@ const state = {
   lastPeriods: null,
   dataSourceOption: 'all',
   combineTiNaoDistricts: false,
+  bulkExportRules: [],
+  bulkExportPeriods: {
+    currentStart: '',
+    currentEnd: '',
+    previousStart: '',
+    previousEnd: '',
+  },
 };
+
+function resolveReportContext(overrides = {}) {
+  return {
+    typeMode: overrides.typeMode ?? state.typeMode,
+    customTypes: Array.isArray(overrides.customTypes)
+      ? [...overrides.customTypes]
+      : [...state.customTypes],
+    violationMode: overrides.violationMode ?? state.violationMode,
+    customViolations: Array.isArray(overrides.customViolations)
+      ? [...overrides.customViolations]
+      : [...state.customViolations],
+    dataSourceOption: overrides.dataSourceOption ?? state.dataSourceOption,
+    combineTiNaoDistricts:
+      typeof overrides.combineTiNaoDistricts === 'boolean'
+        ? overrides.combineTiNaoDistricts
+        : state.combineTiNaoDistricts,
+  };
+}
 
 // Чтобы лишний раз не перерисовывать таблицу при серии событий, ввёл очередь на requestAnimationFrame.
 let scheduledPreviewHandle = null;
@@ -162,12 +191,22 @@ const elements = {
   reportTable: document.getElementById('report-table'),
   refreshButton: document.getElementById('refresh-report'),
   downloadButton: document.getElementById('download-report'),
+  openBulkExportButton: document.getElementById('open-bulk-export'),
   themeToggle: document.getElementById('theme-toggle'),
   themeToggleLabel: document.getElementById('theme-toggle-text'),
   brandLogo: document.querySelector('.brand-logo'),
   easterEggMessage: document.getElementById('easter-egg-message'),
   creditBadge: document.querySelector('.credit-badge'),
   creditBadgeClose: document.querySelector('.credit-badge__close'),
+  bulkExportOverlay: document.getElementById('bulk-export-overlay'),
+  bulkExportPanel: document.getElementById('bulk-export-panel'),
+  closeBulkExportButton: document.getElementById('close-bulk-export'),
+  bulkExportPeriodsContainer: document.getElementById('bulk-export-periods'),
+  bulkExportPeriodsMessage: document.getElementById('bulk-export-periods-message'),
+  bulkExportMessage: document.getElementById('bulk-export-message'),
+  bulkExportRulesContainer: document.getElementById('bulk-export-rules'),
+  addBulkExportRuleButton: document.getElementById('add-bulk-export-rule'),
+  runBulkExportButton: document.getElementById('run-bulk-export'),
 };
 
 const MONTH_NAMES_RU = [
@@ -732,6 +771,41 @@ if (elements.downloadButton) {
   });
 }
 
+if (elements.openBulkExportButton) {
+  elements.openBulkExportButton.addEventListener('click', () => {
+    openBulkExportOverlay();
+  });
+}
+
+if (elements.closeBulkExportButton) {
+  elements.closeBulkExportButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    closeBulkExportOverlay();
+  });
+}
+
+if (elements.bulkExportOverlay) {
+  elements.bulkExportOverlay.addEventListener('click', (event) => {
+    if (event.target === elements.bulkExportOverlay) {
+      closeBulkExportOverlay();
+    }
+  });
+}
+
+if (elements.addBulkExportRuleButton) {
+  elements.addBulkExportRuleButton.addEventListener('click', () => {
+    addBulkExportRule();
+  });
+}
+
+if (elements.runBulkExportButton) {
+  elements.runBulkExportButton.addEventListener('click', () => {
+    handleBulkExportDownload();
+  });
+}
+
+document.addEventListener('keydown', handleBulkOverlayKeydown);
+
 if (elements.dataSourceSelect) {
   elements.dataSourceSelect.addEventListener('change', (event) => {
     const target = event.target;
@@ -1170,6 +1244,7 @@ function updateAvailableFilters() {
   }
   renderViolationOptions();
   updateDataSourceControl();
+  syncBulkExportRulesWithAvailableOptions();
 }
 
 /**
@@ -1514,6 +1589,918 @@ function summarizeDataSourceCategories(column) {
   return summary;
 }
 
+function generateBulkRuleId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function normalizeBulkExportPeriods(periods) {
+  return {
+    currentStart: typeof periods?.currentStart === 'string' ? periods.currentStart.trim() : '',
+    currentEnd: typeof periods?.currentEnd === 'string' ? periods.currentEnd.trim() : '',
+    previousStart: typeof periods?.previousStart === 'string' ? periods.previousStart.trim() : '',
+    previousEnd: typeof periods?.previousEnd === 'string' ? periods.previousEnd.trim() : '',
+  };
+}
+
+function loadBulkExportRulesFromStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(BULK_EXPORT_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.slice(0, MAX_BULK_EXPORT_RULES).map((item) => normalizeBulkExportRule(item));
+  } catch (error) {
+    console.warn('Не удалось прочитать сохранённые правила массовой выгрузки.', error);
+    return [];
+  }
+}
+
+function loadBulkExportPeriodsFromStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+  }
+  try {
+    const raw = window.localStorage.getItem(BULK_EXPORT_PERIODS_STORAGE_KEY);
+    if (!raw) {
+      return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+    }
+    const parsed = JSON.parse(raw);
+    return normalizeBulkExportPeriods(parsed);
+  } catch (error) {
+    console.warn('Не удалось прочитать сохранённые периоды массовой выгрузки.', error);
+    return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+  }
+}
+
+function saveBulkExportRulesToStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  try {
+    const payload = JSON.stringify(state.bulkExportRules.map((rule) => normalizeBulkExportRule(rule)));
+    window.localStorage.setItem(BULK_EXPORT_STORAGE_KEY, payload);
+  } catch (error) {
+    console.warn('Не удалось сохранить правила массовой выгрузки.', error);
+  }
+}
+
+function saveBulkExportPeriodsToStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  try {
+    const payload = JSON.stringify(normalizeBulkExportPeriods(state.bulkExportPeriods));
+    window.localStorage.setItem(BULK_EXPORT_PERIODS_STORAGE_KEY, payload);
+  } catch (error) {
+    console.warn('Не удалось сохранить периоды массовой выгрузки.', error);
+  }
+}
+
+function normalizeStringArray(values, limit) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  const result = [];
+  const seen = new Set();
+  for (const value of values) {
+    if (result.length >= limit) {
+      break;
+    }
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) {
+      continue;
+    }
+    const key = normalizeKey(text);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(text);
+  }
+  return result;
+}
+
+function normalizeBulkExportRule(rule) {
+  const periods = rule?.periods ?? {};
+  const currentStart = typeof periods.currentStart === 'string' ? periods.currentStart.trim() : '';
+  const currentEnd = typeof periods.currentEnd === 'string' ? periods.currentEnd.trim() : '';
+  const previousStart = typeof periods.previousStart === 'string' ? periods.previousStart.trim() : '';
+  const previousEnd = typeof periods.previousEnd === 'string' ? periods.previousEnd.trim() : '';
+  const typeMode = rule?.typeMode === 'custom' ? 'custom' : 'all';
+  const violationMode = rule?.violationMode === 'custom' ? 'custom' : 'all';
+  const dataSourceOption = ['oati', 'cafap', 'all'].includes(rule?.dataSourceOption)
+    ? rule.dataSourceOption
+    : 'all';
+  return {
+    id: typeof rule?.id === 'string' && rule.id ? rule.id : generateBulkRuleId(),
+    name: typeof rule?.name === 'string' ? rule.name.trim() : '',
+    typeMode,
+    customTypes: typeMode === 'custom' ? normalizeStringArray(rule?.customTypes ?? [], 3) : [],
+    violationMode,
+    customViolations:
+      violationMode === 'custom' ? normalizeStringArray(rule?.customViolations ?? [], 5) : [],
+    dataSourceOption,
+    combineTiNaoDistricts: Boolean(rule?.combineTiNaoDistricts),
+    periods: {
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+    },
+  };
+}
+
+function getCurrentPeriodInputs() {
+  return {
+    currentStart: elements.currentStart?.value ?? '',
+    currentEnd: elements.currentEnd?.value ?? '',
+    previousStart: elements.previousStart?.value ?? '',
+    previousEnd: elements.previousEnd?.value ?? '',
+  };
+}
+
+function createDefaultBulkExportRule() {
+  const context = resolveReportContext();
+  const periods = normalizeBulkExportPeriods(state.bulkExportPeriods);
+  return normalizeBulkExportRule({
+    id: generateBulkRuleId(),
+    name: `Правило ${state.bulkExportRules.length + 1}`,
+    typeMode: context.typeMode,
+    customTypes: context.typeMode === 'custom' ? context.customTypes : [],
+    violationMode: context.violationMode,
+    customViolations: context.violationMode === 'custom' ? context.customViolations : [],
+    dataSourceOption: context.dataSourceOption,
+    combineTiNaoDistricts: context.combineTiNaoDistricts,
+    periods,
+  });
+}
+
+function addBulkExportRule() {
+  if (state.bulkExportRules.length >= MAX_BULK_EXPORT_RULES) {
+    setBulkExportMessage(`Можно создать не более ${MAX_BULK_EXPORT_RULES} правил.`);
+    return;
+  }
+  const rule = createDefaultBulkExportRule();
+  state.bulkExportRules = [...state.bulkExportRules, rule];
+  saveBulkExportRulesToStorage();
+  renderBulkExportRules();
+  setBulkExportMessage('Правило добавлено. Настройте параметры перед выгрузкой.');
+}
+
+function deleteBulkExportRule(ruleId) {
+  const next = state.bulkExportRules.filter((rule) => rule.id !== ruleId);
+  if (next.length === state.bulkExportRules.length) {
+    return;
+  }
+  state.bulkExportRules = next;
+  saveBulkExportRulesToStorage();
+  renderBulkExportRules();
+  setBulkExportMessage('Правило удалено.');
+}
+
+function updateBulkExportRule(ruleId, updater, options = {}) {
+  const { render = true } = options;
+  const index = state.bulkExportRules.findIndex((rule) => rule.id === ruleId);
+  if (index === -1) {
+    return;
+  }
+  const current = state.bulkExportRules[index];
+  const nextValue = typeof updater === 'function' ? updater({ ...current }) : { ...current, ...updater };
+  if (!nextValue) {
+    return;
+  }
+  const normalized = normalizeBulkExportRule({ ...current, ...nextValue, id: current.id });
+  const hasChanged = JSON.stringify(current) !== JSON.stringify(normalized);
+  if (!hasChanged) {
+    return;
+  }
+  state.bulkExportRules = [
+    ...state.bulkExportRules.slice(0, index),
+    normalized,
+    ...state.bulkExportRules.slice(index + 1),
+  ];
+  saveBulkExportRulesToStorage();
+  if (render) {
+    renderBulkExportRules();
+  }
+}
+
+function setBulkExportMessage(message) {
+  if (elements.bulkExportMessage) {
+    elements.bulkExportMessage.textContent = message ?? '';
+  }
+}
+
+function renderBulkExportRules() {
+  const container = elements.bulkExportRulesContainer;
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+  if (!state.bulkExportRules.length) {
+    const empty = document.createElement('div');
+    empty.className = 'bulk-export-empty';
+    empty.textContent = 'Добавьте правило, чтобы настроить массовую выгрузку.';
+    container.append(empty);
+  } else {
+    state.bulkExportRules.forEach((rule, index) => {
+      container.append(createBulkExportRuleElement(rule, index));
+    });
+  }
+  if (elements.addBulkExportRuleButton) {
+    elements.addBulkExportRuleButton.disabled = state.bulkExportRules.length >= MAX_BULK_EXPORT_RULES;
+  }
+  if (elements.runBulkExportButton) {
+    elements.runBulkExportButton.disabled = state.bulkExportRules.length === 0;
+  }
+}
+
+function createBulkExportRuleElement(rule, index) {
+  const wrapper = document.createElement('article');
+  wrapper.className = 'bulk-export-rule';
+  wrapper.dataset.ruleId = rule.id;
+
+  const header = document.createElement('div');
+  header.className = 'bulk-export-rule__header';
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'bulk-export-rule__title-input';
+  titleInput.value = rule.name;
+  titleInput.placeholder = `Правило ${index + 1}`;
+  titleInput.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    updateBulkExportRule(rule.id, { name: target.value }, { render: false });
+  });
+  titleInput.addEventListener('blur', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    updateBulkExportRule(rule.id, { name: target.value.trim() });
+  });
+
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.className = 'bulk-export-remove';
+  removeButton.textContent = 'Удалить';
+  removeButton.addEventListener('click', () => deleteBulkExportRule(rule.id));
+
+  header.append(titleInput, removeButton);
+  wrapper.append(header);
+
+  const grid = document.createElement('div');
+  grid.className = 'bulk-export-rule__grid';
+
+  grid.append(createTypeFieldset(rule));
+  grid.append(createViolationFieldset(rule));
+  grid.append(createAdditionalFieldset(rule));
+
+  wrapper.append(grid);
+
+  const issues = collectBulkRuleIssues(rule);
+  if (issues.length) {
+    const warning = document.createElement('div');
+    warning.className = 'bulk-export-warning';
+    warning.textContent = issues.join(' ');
+    wrapper.append(warning);
+  }
+
+  return wrapper;
+}
+
+function renderBulkExportSharedPeriods() {
+  const container = elements.bulkExportPeriodsContainer;
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+
+  const fieldset = document.createElement('fieldset');
+  fieldset.className = 'bulk-export-fieldset';
+  const legend = document.createElement('legend');
+  legend.textContent = 'Периоды для массовой выгрузки';
+  fieldset.append(legend);
+
+  fieldset.append(createSharedPeriodGroup('current', 'Отчётный период'));
+  fieldset.append(createSharedPeriodGroup('previous', 'Предыдущий период'));
+
+  container.append(fieldset);
+
+  if (elements.bulkExportPeriodsMessage) {
+    const issues = collectBulkPeriodsIssues(state.bulkExportPeriods);
+    elements.bulkExportPeriodsMessage.textContent = issues.join(' ');
+  }
+}
+
+function createSharedPeriodGroup(prefix, title) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'bulk-export-period-group';
+
+  const groupTitle = document.createElement('span');
+  groupTitle.className = 'bulk-export-period-group__title';
+  groupTitle.textContent = title;
+  wrapper.append(groupTitle);
+
+  const inputs = document.createElement('div');
+  inputs.className = 'bulk-export-date-inputs';
+  inputs.append(
+    createSharedDateInput(`${prefix}Start`, 'Начало'),
+    createSharedDateInput(`${prefix}End`, 'Окончание'),
+  );
+  wrapper.append(inputs);
+
+  return wrapper;
+}
+
+function createSharedDateInput(key, label) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'bulk-export-date-input';
+
+  const text = document.createElement('span');
+  text.textContent = label;
+  wrapper.append(text);
+
+  const input = document.createElement('input');
+  input.type = 'date';
+  input.value = state.bulkExportPeriods[key] ?? '';
+  const availableRange = deriveAvailableDateRange();
+  if (availableRange) {
+    input.min = availableRange.min;
+    input.max = availableRange.max;
+  }
+  input.disabled = !state.availableDates.length;
+  input.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    updateBulkExportPeriods({ [key]: target.value });
+  });
+  wrapper.append(input);
+  return wrapper;
+}
+
+function updateBulkExportPeriods(changes) {
+  const next = normalizeBulkExportPeriods({
+    ...state.bulkExportPeriods,
+    ...changes,
+  });
+  if (JSON.stringify(next) === JSON.stringify(state.bulkExportPeriods)) {
+    return;
+  }
+  state.bulkExportPeriods = next;
+  saveBulkExportPeriodsToStorage();
+  if (elements.bulkExportPeriodsMessage) {
+    const issues = collectBulkPeriodsIssues(state.bulkExportPeriods);
+    elements.bulkExportPeriodsMessage.textContent = issues.join(' ');
+  }
+}
+
+function collectBulkPeriodsIssues(periods) {
+  const issues = [];
+  if (!state.availableDates.length) {
+    issues.push('Загрузите данные и сопоставьте колонку «Дата обследования», чтобы выбрать периоды для массовой выгрузки.');
+    return issues;
+  }
+  const normalized = normalizeBulkExportPeriods(periods);
+  const currentStart = parseIsoDate(normalized.currentStart);
+  const currentEnd = parseIsoDate(normalized.currentEnd);
+  if (!currentStart || !currentEnd) {
+    issues.push('Укажите даты начала и окончания отчётного периода.');
+  } else if (currentStart > currentEnd) {
+    issues.push('Дата начала отчётного периода не может быть позже даты окончания.');
+  }
+  const previousStart = parseIsoDate(normalized.previousStart);
+  const previousEnd = parseIsoDate(normalized.previousEnd);
+  if (!previousStart || !previousEnd) {
+    issues.push('Заполните предыдущий период.');
+  } else if (previousStart > previousEnd) {
+    issues.push('Дата начала предыдущего периода не может быть позже даты окончания.');
+  }
+  return issues;
+}
+
+function validateBulkPeriods(periods) {
+  const errors = [];
+  const normalized = normalizeBulkExportPeriods(periods);
+  const currentStart = parseIsoDate(normalized.currentStart);
+  const currentEnd = parseIsoDate(normalized.currentEnd);
+  if (!currentStart || !currentEnd) {
+    errors.push('не заполнен отчётный период');
+  } else if (currentStart > currentEnd) {
+    errors.push('отчётный период указан некорректно');
+  }
+  const previousStart = parseIsoDate(normalized.previousStart);
+  const previousEnd = parseIsoDate(normalized.previousEnd);
+  if (!previousStart || !previousEnd) {
+    errors.push('не заполнен предыдущий период');
+  } else if (previousStart > previousEnd) {
+    errors.push('предыдущий период указан некорректно');
+  }
+  const result =
+    !errors.length && currentStart && currentEnd && previousStart && previousEnd
+      ? {
+          current: { start: currentStart, end: currentEnd },
+          previous: { start: previousStart, end: previousEnd },
+        }
+      : null;
+  return { periods: result, errors };
+}
+
+function syncBulkExportPeriodsWithAvailability() {
+  const normalized = normalizeBulkExportPeriods(state.bulkExportPeriods);
+  let next = { ...normalized };
+  let changed = false;
+  if (!state.availableDates.length) {
+    if (Object.values(next).some(Boolean)) {
+      next = {
+        currentStart: '',
+        currentEnd: '',
+        previousStart: '',
+        previousEnd: '',
+      };
+      changed = true;
+    }
+  } else {
+    const range = deriveAvailableDateRange();
+    if (range) {
+      for (const key of ['currentStart', 'currentEnd', 'previousStart', 'previousEnd']) {
+        const value = next[key];
+        if (value && (value < range.min || value > range.max)) {
+          next[key] = '';
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    state.bulkExportPeriods = next;
+    saveBulkExportPeriodsToStorage();
+  } else {
+    state.bulkExportPeriods = normalized;
+  }
+  renderBulkExportSharedPeriods();
+}
+
+function deriveAvailableDateRange() {
+  if (!state.availableDates.length) {
+    return null;
+  }
+  const first = state.availableDates[0]?.iso;
+  const last = state.availableDates[state.availableDates.length - 1]?.iso;
+  if (!first || !last) {
+    return null;
+  }
+  return { min: first, max: last };
+}
+
+function createTypeFieldset(rule) {
+  const fieldset = document.createElement('fieldset');
+  fieldset.className = 'bulk-export-fieldset';
+  const legend = document.createElement('legend');
+  legend.textContent = 'Типы объектов контроля';
+  fieldset.append(legend);
+
+  const select = document.createElement('select');
+  const optionAll = document.createElement('option');
+  optionAll.value = 'all';
+  optionAll.textContent = 'Все типы объектов';
+  const optionCustom = document.createElement('option');
+  optionCustom.value = 'custom';
+  optionCustom.textContent = 'Выбрать вручную';
+  select.append(optionAll, optionCustom);
+  select.value = rule.typeMode;
+  select.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const nextMode = target.value === 'custom' ? 'custom' : 'all';
+    updateBulkExportRule(rule.id, {
+      typeMode: nextMode,
+      customTypes: nextMode === 'custom' ? rule.customTypes : [],
+    });
+  });
+  fieldset.append(select);
+
+  if (rule.typeMode !== 'custom') {
+    const note = document.createElement('p');
+    note.className = 'bulk-export-note';
+    note.textContent = 'Используются все типы объектов из загруженных данных.';
+    fieldset.append(note);
+    return fieldset;
+  }
+
+  if (!state.availableTypes.length) {
+    const note = document.createElement('p');
+    note.className = 'bulk-export-note';
+    note.textContent = 'Типы объектов появятся после загрузки файлов и сопоставления колонок.';
+    fieldset.append(note);
+    return fieldset;
+  }
+
+  const optionsWrapper = document.createElement('div');
+  optionsWrapper.className = 'bulk-export-options';
+  const selected = new Set(rule.customTypes);
+  const limitReached = rule.customTypes.length >= 3;
+  for (const value of state.availableTypes) {
+    const optionLabel = document.createElement('label');
+    optionLabel.className = 'bulk-export-option';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = value;
+    input.checked = selected.has(value);
+    if (!selected.has(value) && limitReached) {
+      input.disabled = true;
+    }
+    input.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+      if (target.checked) {
+        if (rule.customTypes.length >= 3) {
+          target.checked = false;
+          setBulkExportMessage('Можно выбрать не более трех типов объектов.');
+          return;
+        }
+        updateBulkExportRule(rule.id, {
+          customTypes: [...rule.customTypes, value],
+        });
+      } else {
+        updateBulkExportRule(rule.id, {
+          customTypes: rule.customTypes.filter((item) => item !== value),
+        });
+      }
+    });
+    const text = document.createElement('span');
+    text.textContent = value;
+    optionLabel.append(input, text);
+    optionsWrapper.append(optionLabel);
+  }
+  fieldset.append(optionsWrapper);
+
+  const note = document.createElement('p');
+  note.className = 'bulk-export-note';
+  note.textContent = 'Можно выбрать не более трех типов объектов.';
+  fieldset.append(note);
+
+  return fieldset;
+}
+
+function createViolationFieldset(rule) {
+  const fieldset = document.createElement('fieldset');
+  fieldset.className = 'bulk-export-fieldset';
+  const legend = document.createElement('legend');
+  legend.textContent = 'Наименования нарушений';
+  fieldset.append(legend);
+
+  const select = document.createElement('select');
+  const optionAll = document.createElement('option');
+  optionAll.value = 'all';
+  optionAll.textContent = 'Все нарушения';
+  const optionCustom = document.createElement('option');
+  optionCustom.value = 'custom';
+  optionCustom.textContent = 'Выбрать вручную';
+  select.append(optionAll, optionCustom);
+  select.value = rule.violationMode;
+  select.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const nextMode = target.value === 'custom' ? 'custom' : 'all';
+    updateBulkExportRule(rule.id, {
+      violationMode: nextMode,
+      customViolations: nextMode === 'custom' ? rule.customViolations : [],
+    });
+  });
+  fieldset.append(select);
+
+  if (rule.violationMode !== 'custom') {
+    const note = document.createElement('p');
+    note.className = 'bulk-export-note';
+    note.textContent = 'Фильтр по наименованиям нарушений не применяется.';
+    fieldset.append(note);
+    return fieldset;
+  }
+
+  if (!state.availableViolations.length) {
+    const note = document.createElement('p');
+    note.className = 'bulk-export-note';
+    note.textContent = 'Загрузите таблицу нарушений и сопоставьте колонку, чтобы выбрать наименования.';
+    fieldset.append(note);
+    return fieldset;
+  }
+
+  const optionsWrapper = document.createElement('div');
+  optionsWrapper.className = 'bulk-export-options';
+  const selected = new Set(rule.customViolations);
+  const limitReached = rule.customViolations.length >= 5;
+  for (const value of state.availableViolations) {
+    const optionLabel = document.createElement('label');
+    optionLabel.className = 'bulk-export-option';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = value;
+    input.checked = selected.has(value);
+    if (!selected.has(value) && limitReached) {
+      input.disabled = true;
+    }
+    input.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+      if (target.checked) {
+        if (rule.customViolations.length >= 5) {
+          target.checked = false;
+          setBulkExportMessage('Можно выбрать не более пяти наименований нарушений.');
+          return;
+        }
+        updateBulkExportRule(rule.id, {
+          customViolations: [...rule.customViolations, value],
+        });
+      } else {
+        updateBulkExportRule(rule.id, {
+          customViolations: rule.customViolations.filter((item) => item !== value),
+        });
+      }
+    });
+    const text = document.createElement('span');
+    text.textContent = value;
+    optionLabel.append(input, text);
+    optionsWrapper.append(optionLabel);
+  }
+  fieldset.append(optionsWrapper);
+
+  const note = document.createElement('p');
+  note.className = 'bulk-export-note';
+  note.textContent = 'Можно выбрать не более пяти наименований нарушений.';
+  fieldset.append(note);
+
+  return fieldset;
+}
+
+function createAdditionalFieldset(rule) {
+  const fieldset = document.createElement('fieldset');
+  fieldset.className = 'bulk-export-fieldset';
+  const legend = document.createElement('legend');
+  legend.textContent = 'Дополнительные параметры';
+  fieldset.append(legend);
+
+  const sourceLabel = document.createElement('label');
+  const sourceText = document.createElement('span');
+  sourceText.textContent = 'Источник данных';
+  sourceLabel.append(sourceText);
+  const select = document.createElement('select');
+  const optionAll = document.createElement('option');
+  optionAll.value = 'all';
+  optionAll.textContent = 'ОАТИ и ЦАФАП';
+  const optionOati = document.createElement('option');
+  optionOati.value = 'oati';
+  optionOati.textContent = 'Только ОАТИ';
+  const optionCafap = document.createElement('option');
+  optionCafap.value = 'cafap';
+  optionCafap.textContent = 'Только ЦАФАП';
+  select.append(optionAll, optionOati, optionCafap);
+  select.value = rule.dataSourceOption;
+  const hasDataSourceColumn = Boolean(state.violationMapping.dataSource);
+  select.disabled = !hasDataSourceColumn;
+  select.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const value = target.value;
+    updateBulkExportRule(rule.id, {
+      dataSourceOption: ['oati', 'cafap'].includes(value) ? value : 'all',
+    });
+  });
+  sourceLabel.append(select);
+  fieldset.append(sourceLabel);
+
+  if (!hasDataSourceColumn && rule.dataSourceOption !== 'all') {
+    const note = document.createElement('p');
+    note.className = 'bulk-export-note';
+    note.textContent = 'Фильтр по источнику станет доступен после сопоставления соответствующей колонки.';
+    fieldset.append(note);
+  }
+
+  const tinaoLabel = document.createElement('label');
+  tinaoLabel.className = 'bulk-export-option';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = rule.combineTiNaoDistricts;
+  checkbox.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    updateBulkExportRule(rule.id, { combineTiNaoDistricts: target.checked }, { render: false });
+  });
+  const checkboxText = document.createElement('span');
+  checkboxText.textContent = 'Объединять округа НАО и ТАО в «ТиНАО»';
+  tinaoLabel.append(checkbox, checkboxText);
+  fieldset.append(tinaoLabel);
+
+  return fieldset;
+}
+
+function collectBulkRuleIssues(rule) {
+  const issues = [];
+  if (rule.typeMode === 'custom' && !rule.customTypes.length) {
+    issues.push('Выберите типы объектов или переключитесь на использование всех типов.');
+  }
+  if (rule.violationMode === 'custom' && !rule.customViolations.length) {
+    issues.push('Добавьте хотя бы одно наименование нарушения или отключите фильтр.');
+  }
+  if (!state.violationMapping.dataSource && rule.dataSourceOption !== 'all') {
+    issues.push('Фильтр по источнику будет применён только после сопоставления колонки «Источник данных».');
+  }
+  return issues;
+}
+
+function validateBulkRule(rule) {
+  const errors = [];
+  if (rule.typeMode === 'custom' && !rule.customTypes.length) {
+    errors.push('не выбраны типы объектов для фильтра');
+  }
+  if (rule.violationMode === 'custom' && !rule.customViolations.length) {
+    errors.push('не выбраны наименования нарушений для фильтра');
+  }
+  if (!state.violationMapping.dataSource && rule.dataSourceOption !== 'all') {
+    errors.push('фильтр по источнику данных станет доступен после сопоставления колонки «Источник данных»');
+  }
+  return { errors };
+}
+
+function syncBulkExportRulesWithAvailableOptions() {
+  if (!state.bulkExportRules.length) {
+    return;
+  }
+  const typeSet = new Set(state.availableTypes);
+  const violationSet = new Set(state.availableViolations);
+  let changed = false;
+  const next = state.bulkExportRules.map((rule) => {
+    const filteredTypes = rule.customTypes.filter((value) => typeSet.has(value));
+    const filteredViolations = rule.customViolations.filter((value) => violationSet.has(value));
+    if (filteredTypes.length !== rule.customTypes.length || filteredViolations.length !== rule.customViolations.length) {
+      changed = true;
+    }
+    return normalizeBulkExportRule({
+      ...rule,
+      customTypes: filteredTypes,
+      customViolations: filteredViolations,
+    });
+  });
+  if (changed) {
+    state.bulkExportRules = next;
+    saveBulkExportRulesToStorage();
+  }
+  renderBulkExportRules();
+  syncBulkExportPeriodsWithAvailability();
+}
+
+function openBulkExportOverlay() {
+  if (!elements.bulkExportOverlay) {
+    return;
+  }
+  elements.bulkExportOverlay.hidden = false;
+  document.body.classList.add('no-scroll');
+  setBulkExportMessage('');
+  renderBulkExportSharedPeriods();
+  renderBulkExportRules();
+  if (elements.bulkExportPanel) {
+    elements.bulkExportPanel.focus();
+  }
+}
+
+function closeBulkExportOverlay() {
+  if (!elements.bulkExportOverlay) {
+    return;
+  }
+  elements.bulkExportOverlay.hidden = true;
+  document.body.classList.remove('no-scroll');
+  if (elements.openBulkExportButton) {
+    elements.openBulkExportButton.focus();
+  }
+}
+
+function isBulkOverlayOpen() {
+  return Boolean(elements.bulkExportOverlay && !elements.bulkExportOverlay.hidden);
+}
+
+function handleBulkOverlayKeydown(event) {
+  if (event.key === 'Escape' && isBulkOverlayOpen()) {
+    closeBulkExportOverlay();
+  }
+}
+
+function handleBulkExportDownload() {
+  if (!state.bulkExportRules.length) {
+    setBulkExportMessage('Добавьте хотя бы одно правило массовой выгрузки.');
+    return;
+  }
+  if (!(state.violations.length && state.objects.length)) {
+    setBulkExportMessage('Загрузите таблицы нарушений и объектов, чтобы сформировать массовую выгрузку.');
+    return;
+  }
+  if (
+    !isMappingComplete(state.violationMapping, violationFieldDefinitions) ||
+    !isMappingComplete(state.objectMapping, objectFieldDefinitions)
+  ) {
+    setBulkExportMessage('Проверьте настройки соответствия столбцов перед массовой выгрузкой.');
+    return;
+  }
+  const { periods, errors: periodErrors } = validateBulkPeriods(state.bulkExportPeriods);
+  if (!periods || periodErrors.length) {
+    setBulkExportMessage(`Не удалось подготовить массовую выгрузку: ${periodErrors.join(', ')}.`);
+    renderBulkExportSharedPeriods();
+    return;
+  }
+  const problems = [];
+  const prepared = [];
+  state.bulkExportRules.forEach((rule, index) => {
+    const { errors } = validateBulkRule(rule);
+    if (errors.length) {
+      const ruleName = rule.name || `Правило ${index + 1}`;
+      problems.push(`${ruleName}: ${errors.join(', ')}`);
+      return;
+    }
+    const context = {
+      typeMode: rule.typeMode,
+      customTypes: rule.typeMode === 'custom' ? rule.customTypes : [],
+      violationMode: rule.violationMode,
+      customViolations: rule.violationMode === 'custom' ? rule.customViolations : [],
+      dataSourceOption: state.violationMapping.dataSource ? rule.dataSourceOption : 'all',
+      combineTiNaoDistricts: rule.combineTiNaoDistricts,
+    };
+    prepared.push({ rule, periods, context, index });
+  });
+  if (problems.length) {
+    setBulkExportMessage(`Не удалось подготовить массовую выгрузку: ${problems.join('; ')}.`);
+    return;
+  }
+  try {
+    const workbook = XLSX.utils.book_new();
+    prepared.forEach(({ rule, periods, context, index }) => {
+      const report = buildReport(periods, context);
+      const sheetLabel = rule.name ? `${index + 1}. ${rule.name}` : `Правило ${index + 1}`;
+      const { sheet, sheetName } = createWorksheetForReport(report, periods, {
+        context,
+        sheetName: sheetLabel,
+        titlePrefix: rule.name || `Правило ${index + 1}`,
+      });
+      XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+    });
+    const fileName = buildBulkExportFileName();
+    XLSX.writeFile(workbook, fileName);
+    setBulkExportMessage(`Скачан файл «${fileName}».`);
+  } catch (error) {
+    console.error('Не удалось сформировать массовую выгрузку.', error);
+    setBulkExportMessage('Произошла ошибка при формировании файла. Повторите попытку.');
+  }
+}
+
+function buildBulkExportFileName() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const raw = `Массовая выгрузка ОАТИ ${year}-${month}-${day}_${hours}-${minutes}.xlsx`;
+  return raw.replace(/[\\/:*?"<>|]+/g, '_');
+}
+
+function initializeBulkExportFeature() {
+  state.bulkExportRules = loadBulkExportRulesFromStorage();
+  state.bulkExportPeriods = loadBulkExportPeriodsFromStorage();
+  renderBulkExportRules();
+  syncBulkExportPeriodsWithAvailability();
+  if (elements.bulkExportOverlay) {
+    elements.bulkExportOverlay.hidden = true;
+  }
+  if (document.body) {
+    document.body.classList.remove('no-scroll');
+  }
+}
+
 /**
  * Переключает доступность кнопки экспорта в Excel.
  *
@@ -1856,15 +2843,16 @@ function getPrimaryObjectIdentifier(candidates) {
  *   Выбранные пользователем периоды.
  * @returns {{rows: Array<object>, totalRow: object}} Строки отчёта и итоговая строка.
  */
-function buildReport(periods) {
+function buildReport(periods, overrides = {}) {
   const violationMapping = state.violationMapping;
   const objectMapping = state.objectMapping;
-  const typePredicate = createTypePredicate();
-  const violationPredicate = createViolationPredicate();
-  const dataSourcePredicate = createDataSourcePredicate();
+  const context = resolveReportContext(overrides);
+  const typePredicate = createTypePredicate(context);
+  const violationPredicate = createViolationPredicate(context);
+  const dataSourcePredicate = createDataSourcePredicate(context);
   // Здесь буду копить агрегированные данные по округам.
   const districtData = new Map();
-  const combineTiNao = state.combineTiNaoDistricts;
+  const combineTiNao = context.combineTiNaoDistricts;
   const districtLookup = buildDistrictLookup(
     state.objects,
     objectMapping.district,
@@ -1913,7 +2901,7 @@ function buildReport(periods) {
     if (typeValue && !typePredicate(typeValue)) {
       continue;
     }
-    if (!typeValue && state.typeMode === 'custom') {
+    if (!typeValue && context.typeMode === 'custom') {
       continue;
     }
     const districtLabel = getValueAsString(record[objectMapping.district]);
@@ -1940,7 +2928,7 @@ function buildReport(periods) {
   // Затем обрабатываю таблицу нарушений, чтобы посчитать динамику и статусы.
   const inspectionResultColumn = violationMapping.inspectionResult;
 
-  const shouldApplyViolationFilter = state.violationMode === 'custom' && state.customViolations.length;
+  const shouldApplyViolationFilter = context.violationMode === 'custom' && context.customViolations.length;
 
   for (const record of state.violations) {
     if (!dataSourcePredicate(record)) {
@@ -1950,7 +2938,7 @@ function buildReport(periods) {
     if (typeValue && !typePredicate(typeValue)) {
       continue;
     }
-    if (!typeValue && state.typeMode === 'custom') {
+    if (!typeValue && context.typeMode === 'custom') {
       continue;
     }
     const districtLabel = getValueAsString(record[violationMapping.district]);
@@ -2131,13 +3119,14 @@ function compareDistrictEntries(a, b) {
  * @param {{rows: Array<object>, totalRow: object}} report Агрегированные строки отчёта.
  * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Выбранные периоды.
  */
-function renderReportTable(report, periods) {
-  const headers = buildTableHeaders(periods);
+function renderReportTable(report, periods, overrides = {}) {
+  const context = resolveReportContext(overrides);
+  const headers = buildTableHeaders(periods, context);
   const table = elements.reportTable;
   table.innerHTML = '';
 
   const caption = document.createElement('caption');
-  caption.textContent = buildTableCaption(report, periods);
+  caption.textContent = buildTableCaption(report, periods, context);
   table.append(caption);
 
   const thead = document.createElement('thead');
@@ -2198,8 +3187,8 @@ function createCell(value, isHeader = false) {
 }
 
 // Формирую заголовки таблицы, включая динамический текст по выбранному периоду.
-function buildTableHeaders(periods) {
-  const totalHeader = buildTotalHeader();
+function buildTableHeaders(periods, context = resolveReportContext()) {
+  const totalHeader = buildTotalHeader(context);
   const rangeHeader = `Проверено объектов контроля с  ${formatDateDisplay(periods.current.start)} по ${formatDateDisplay(periods.current.end)}`;
   return [
     'Округ',
@@ -2222,10 +3211,10 @@ function buildTableHeaders(periods) {
  * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Выбранные периоды.
  * @returns {string} Текст подписи для таблицы.
  */
-function buildTableCaption(report, periods) {
+function buildTableCaption(report, periods, context = resolveReportContext()) {
   const currentRange = formatPeriodRange(periods.current);
   const rowsDescription = `Строк в таблице: ${numberFormatter.format(report.rows.length)}.`;
-  const dataSourceDescription = describeSelectedDataSource();
+  const dataSourceDescription = describeSelectedDataSource(context.dataSourceOption);
   const base = currentRange ? `Отчёт за период ${currentRange}.` : 'Отчётный период не выбран.';
   return `${base} ${dataSourceDescription}. ${rowsDescription}`.trim();
 }
@@ -2235,14 +3224,14 @@ function buildTableCaption(report, periods) {
  *
  * @returns {string} Подпись столбца.
  */
-function buildTotalHeader() {
-  if (state.typeMode === 'all' || !state.customTypes.length) {
+function buildTotalHeader(context = resolveReportContext()) {
+  if (context.typeMode === 'all' || !context.customTypes.length) {
     return 'Всего ОДХ';
   }
-  if (state.customTypes.length === 1) {
-    return `Всего ${state.customTypes[0]}`;
+  if (context.customTypes.length === 1) {
+    return `Всего ${context.customTypes[0]}`;
   }
-  return `Всего (${state.customTypes.join(', ')})`;
+  return `Всего (${context.customTypes.join(', ')})`;
 }
 
 /**
@@ -2263,11 +3252,11 @@ function buildExcelHeaderNumbers(columnCount) {
   return extended;
 }
 
-function buildViolationSelectionDescription() {
-  if (state.violationMode === 'custom' && state.customViolations.length) {
+function buildViolationSelectionDescription(context = resolveReportContext()) {
+  if (context.violationMode === 'custom' && context.customViolations.length) {
     const seen = new Set();
     const names = [];
-    for (const value of state.customViolations) {
+    for (const value of context.customViolations) {
       const text = getValueAsString(value);
       const key = normalizeKey(text);
       if (!key || seen.has(key)) {
@@ -2289,13 +3278,14 @@ function buildViolationSelectionDescription() {
  * @param {{current?: {start: Date, end: Date}}} periods Выбранные периоды.
  * @returns {string} Заголовок листа Excel.
  */
-function buildExcelTitle(periods) {
+function buildExcelTitle(periods, context = resolveReportContext(), options = {}) {
+  const { titlePrefix } = options;
   const periodRange = formatTitlePeriod(periods?.current);
-  const parts = ['Нарушения на ОДХ'];
+  const parts = [titlePrefix || 'Нарушения на ОДХ'];
   if (periodRange) {
     parts[0] += ` (отчёт за ${periodRange})`;
   }
-  const dataSource = describeDataSourceForTitle();
+  const dataSource = describeDataSourceForTitle(context.dataSourceOption);
   if (dataSource) {
     parts.push(dataSource);
   }
@@ -2307,8 +3297,8 @@ function buildExcelTitle(periods) {
  *
  * @returns {string} Фраза для заголовка.
  */
-function describeDataSourceForTitle() {
-  switch (state.dataSourceOption) {
+function describeDataSourceForTitle(option = state.dataSourceOption) {
+  switch (option) {
     case 'oati':
       return 'накопленные только ОАТИ';
     case 'cafap':
@@ -2381,11 +3371,11 @@ function parseIsoDate(iso) {
  *
  * @returns {(value: string) => boolean} Функция-предикат.
  */
-function createTypePredicate() {
-  if (state.typeMode === 'all' || !state.customTypes.length) {
+function createTypePredicate(context = resolveReportContext()) {
+  if (context.typeMode === 'all' || !context.customTypes.length) {
     return () => true;
   }
-  const allowed = new Set(state.customTypes.map((value) => normalizeKey(value)));
+  const allowed = new Set(context.customTypes.map((value) => normalizeKey(value)));
   return (value) => allowed.has(normalizeKey(value));
 }
 
@@ -2394,11 +3384,11 @@ function createTypePredicate() {
  *
  * @returns {(value: string) => boolean} Функция-предикат.
  */
-function createViolationPredicate() {
-  if (state.violationMode === 'all' || !state.customViolations.length) {
+function createViolationPredicate(context = resolveReportContext()) {
+  if (context.violationMode === 'all' || !context.customViolations.length) {
     return () => true;
   }
-  const allowed = new Set(state.customViolations.map((value) => normalizeKey(value)));
+  const allowed = new Set(context.customViolations.map((value) => normalizeKey(value)));
   return (value) => allowed.has(normalizeKey(value));
 }
 
@@ -2407,12 +3397,12 @@ function createViolationPredicate() {
  *
  * @returns {(record: object) => boolean} Функция-предикат.
  */
-function createDataSourcePredicate() {
+function createDataSourcePredicate(context = resolveReportContext()) {
   const column = state.violationMapping.dataSource;
   if (!column) {
     return () => true;
   }
-  const mode = state.dataSourceOption;
+  const mode = context.dataSourceOption;
   if (mode === 'all') {
     return () => true;
   }
@@ -2715,159 +3705,179 @@ function formatPercent(value) {
  * @param {{rows: Array<object>, totalRow: object}} report Данные отчёта.
  * @param {{current: {start: Date, end: Date}, previous: {start: Date, end: Date}}} periods Периоды отчёта.
  */
+function createWorksheetForReport(report, periods, options = {}) {
+  const { context: overrides = {}, sheetName = 'Отчёт', titlePrefix } = options;
+  const context = resolveReportContext(overrides);
+  const headers = buildTableHeaders(periods, context);
+  const columnCount = headers.length;
+  const headerNumbers = buildExcelHeaderNumbers(columnCount);
+  const title = buildExcelTitle(periods, context, { titlePrefix });
+  const violationDescription = buildViolationSelectionDescription(context);
+
+  const createEmptyRow = () => Array.from({ length: columnCount }, () => null);
+  const aoa = [];
+
+  aoa.push(createEmptyRow());
+  const titleRowIndex = aoa.length;
+  aoa.push([title, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
+  let descriptionRowIndex = null;
+  if (violationDescription) {
+    descriptionRowIndex = aoa.length;
+    aoa.push([violationDescription, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
+  }
+  aoa.push(createEmptyRow());
+  const headerRowIndex = aoa.length;
+  aoa.push(headers);
+  const numberRowIndex = aoa.length;
+  aoa.push(headerNumbers);
+
+  const dataStartRow = aoa.length;
+  aoa.push(buildExportDataRow(report.totalRow));
+  const detailStartRow = aoa.length;
+  for (const row of report.rows) {
+    aoa.push(buildExportDataRow(row));
+  }
+  const lastDataRowIndex = aoa.length - 1;
+
+  const sheet = XLSX.utils.aoa_to_sheet(aoa);
+  const merges = [
+    { s: { r: titleRowIndex, c: 0 }, e: { r: titleRowIndex, c: columnCount - 1 } },
+  ];
+  if (descriptionRowIndex !== null) {
+    merges.push({ s: { r: descriptionRowIndex, c: 0 }, e: { r: descriptionRowIndex, c: columnCount - 1 } });
+  }
+  sheet['!merges'] = merges;
+
+  const baseColumnWidths = [26, 16, 22, 28, 22, 20, 34, 34, 24, 24];
+  sheet['!cols'] = Array.from({ length: columnCount }, (_, index) => ({
+    wch: baseColumnWidths[index] ?? 20,
+  }));
+
+  sheet['!rows'] = sheet['!rows'] ?? [];
+  sheet['!rows'][titleRowIndex] = { hpt: 26 };
+  if (descriptionRowIndex !== null) {
+    sheet['!rows'][descriptionRowIndex] = { hpt: 20 };
+  }
+  sheet['!rows'][headerRowIndex] = { hpt: 48 };
+  sheet['!rows'][numberRowIndex] = { hpt: 22 };
+  sheet['!rows'][dataStartRow] = { hpt: 24 };
+
+  const baseFont = { name: 'Times New Roman', color: { rgb: 'FF1F2937' } };
+  const borderColor = 'FF94A3B8';
+  const titleStyle = {
+    font: { ...baseFont, bold: true, sz: 14 },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    fill: { fgColor: { rgb: 'FFE2E8F0' } },
+    border: buildBorderStyle(borderColor),
+  };
+  const descriptionStyle = {
+    font: { ...baseFont, sz: 11 },
+    alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+    fill: { fgColor: { rgb: 'FFF8FAFC' } },
+    border: buildBorderStyle(borderColor),
+  };
+  const headerStyle = {
+    font: { ...baseFont, bold: true },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+    fill: { fgColor: { rgb: 'FFCBD5F5' } },
+    border: buildBorderStyle(borderColor),
+  };
+  const numberingStyle = {
+    font: { ...baseFont, bold: true },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    fill: { fgColor: { rgb: 'FFE0E7FF' } },
+    border: buildBorderStyle(borderColor),
+  };
+  const baseDataStyle = {
+    font: { ...baseFont },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: buildBorderStyle(borderColor),
+  };
+  const zebraDataStyle = {
+    fill: { fgColor: { rgb: 'FFF8FAFC' } },
+  };
+  const totalRowStyle = {
+    font: { ...baseFont, bold: true, sz: 12 },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    fill: { fgColor: { rgb: 'FFFDEBD3' } },
+    border: buildBorderStyle(borderColor),
+  };
+  const firstColumnStyle = {
+    alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+  };
+
+  for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+    setCellStyle(sheet, titleRowIndex, colIndex, titleStyle);
+    if (descriptionRowIndex !== null) {
+      setCellStyle(sheet, descriptionRowIndex, colIndex, descriptionStyle);
+    }
+    setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);
+    setCellStyle(sheet, numberRowIndex, colIndex, numberingStyle);
+  }
+
+  for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+    const styles = [totalRowStyle];
+    if (colIndex === 0) {
+      styles.push(firstColumnStyle);
+    }
+    setCellStyle(sheet, dataStartRow, colIndex, ...styles);
+  }
+
+  if (detailStartRow <= lastDataRowIndex) {
+    for (let rowIndex = detailStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
+      const isZebraRow = (rowIndex - detailStartRow) % 2 === 1;
+      for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+        const styles = [baseDataStyle];
+        if (isZebraRow) {
+          styles.push(zebraDataStyle);
+        }
+        if (colIndex === 0) {
+          styles.push(firstColumnStyle);
+        }
+        setCellStyle(sheet, rowIndex, colIndex, ...styles);
+      }
+      sheet['!rows'][rowIndex] = { ...(sheet['!rows'][rowIndex] ?? {}), hpt: 20 };
+    }
+  }
+
+  const integerColumns = [1, 2, 5, 6, 7, 8, 9];
+  const percentColumns = [3, 4];
+  for (let rowIndex = dataStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
+    for (const column of integerColumns) {
+      setNumberFormat(sheet, rowIndex, column, '#,##0');
+    }
+    for (const column of percentColumns) {
+      setNumberFormat(sheet, rowIndex, column, '0.0%');
+    }
+  }
+
+  return { sheet, sheetName: sanitizeWorksheetName(sheetName) };
+}
+
 function exportReportToExcel(report, periods) {
   try {
-    const headers = buildTableHeaders(periods);
-    const columnCount = headers.length;
-    const headerNumbers = buildExcelHeaderNumbers(columnCount);
-    const title = buildExcelTitle(periods);
-    const violationDescription = buildViolationSelectionDescription();
-
-    const createEmptyRow = () => Array.from({ length: columnCount }, () => null);
-    const aoa = [];
-
-    aoa.push(createEmptyRow());
-    const titleRowIndex = aoa.length;
-    aoa.push([title, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
-    let descriptionRowIndex = null;
-    if (violationDescription) {
-      descriptionRowIndex = aoa.length;
-      aoa.push([violationDescription, ...Array(Math.max(0, columnCount - 1)).fill(null)]);
-    }
-    aoa.push(createEmptyRow());
-    const headerRowIndex = aoa.length;
-    aoa.push(headers);
-    const numberRowIndex = aoa.length;
-    aoa.push(headerNumbers);
-
-    const dataStartRow = aoa.length;
-    aoa.push(buildExportDataRow(report.totalRow));
-    const detailStartRow = aoa.length;
-    for (const row of report.rows) {
-      aoa.push(buildExportDataRow(row));
-    }
-    const lastDataRowIndex = aoa.length - 1;
-
-    const sheet = XLSX.utils.aoa_to_sheet(aoa);
-    const merges = [
-      { s: { r: titleRowIndex, c: 0 }, e: { r: titleRowIndex, c: columnCount - 1 } },
-    ];
-    if (descriptionRowIndex !== null) {
-      merges.push({ s: { r: descriptionRowIndex, c: 0 }, e: { r: descriptionRowIndex, c: columnCount - 1 } });
-    }
-    sheet['!merges'] = merges;
-
-    const baseColumnWidths = [26, 16, 22, 28, 22, 20, 34, 34, 24, 24];
-    sheet['!cols'] = Array.from({ length: columnCount }, (_, index) => ({
-      wch: baseColumnWidths[index] ?? 20,
-    }));
-
-    sheet['!rows'] = sheet['!rows'] ?? [];
-    sheet['!rows'][titleRowIndex] = { hpt: 26 };
-    if (descriptionRowIndex !== null) {
-      sheet['!rows'][descriptionRowIndex] = { hpt: 20 };
-    }
-    sheet['!rows'][headerRowIndex] = { hpt: 48 };
-    sheet['!rows'][numberRowIndex] = { hpt: 22 };
-    sheet['!rows'][dataStartRow] = { hpt: 24 };
-
-    const baseFont = { name: 'Times New Roman', color: { rgb: 'FF1F2937' } };
-    const borderColor = 'FF94A3B8';
-    const titleStyle = {
-      font: { ...baseFont, bold: true, sz: 14 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      fill: { fgColor: { rgb: 'FFE2E8F0' } },
-      border: buildBorderStyle(borderColor),
-    };
-    const descriptionStyle = {
-      font: { ...baseFont, sz: 11 },
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-      fill: { fgColor: { rgb: 'FFF8FAFC' } },
-      border: buildBorderStyle(borderColor),
-    };
-    const headerStyle = {
-      font: { ...baseFont, bold: true },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      fill: { fgColor: { rgb: 'FFCBD5F5' } },
-      border: buildBorderStyle(borderColor),
-    };
-    const numberingStyle = {
-      font: { ...baseFont, bold: true },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: 'FFE0E7FF' } },
-      border: buildBorderStyle(borderColor),
-    };
-    const baseDataStyle = {
-      font: { ...baseFont },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: buildBorderStyle(borderColor),
-    };
-    const zebraDataStyle = {
-      fill: { fgColor: { rgb: 'FFF8FAFC' } },
-    };
-    const totalRowStyle = {
-      font: { ...baseFont, bold: true, sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      fill: { fgColor: { rgb: 'FFFDEBD3' } },
-      border: buildBorderStyle(borderColor),
-    };
-    const firstColumnStyle = {
-      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
-    };
-
-    for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
-      setCellStyle(sheet, titleRowIndex, colIndex, titleStyle);
-      if (descriptionRowIndex !== null) {
-        setCellStyle(sheet, descriptionRowIndex, colIndex, descriptionStyle);
-      }
-      setCellStyle(sheet, headerRowIndex, colIndex, headerStyle);
-      setCellStyle(sheet, numberRowIndex, colIndex, numberingStyle);
-    }
-
-    for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
-      const styles = [totalRowStyle];
-      if (colIndex === 0) {
-        styles.push(firstColumnStyle);
-      }
-      setCellStyle(sheet, dataStartRow, colIndex, ...styles);
-    }
-
-    if (detailStartRow <= lastDataRowIndex) {
-      for (let rowIndex = detailStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
-        const isZebraRow = (rowIndex - detailStartRow) % 2 === 1;
-        for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
-          const styles = [baseDataStyle];
-          if (isZebraRow) {
-            styles.push(zebraDataStyle);
-          }
-          if (colIndex === 0) {
-            styles.push(firstColumnStyle);
-          }
-          setCellStyle(sheet, rowIndex, colIndex, ...styles);
-        }
-        sheet['!rows'][rowIndex] = { ...(sheet['!rows'][rowIndex] ?? {}), hpt: 20 };
-      }
-    }
-
-    const integerColumns = [1, 2, 5, 6, 7, 8, 9];
-    const percentColumns = [3, 4];
-    for (let rowIndex = dataStartRow; rowIndex <= lastDataRowIndex; rowIndex += 1) {
-      for (const column of integerColumns) {
-        setNumberFormat(sheet, rowIndex, column, '#,##0');
-      }
-      for (const column of percentColumns) {
-        setNumberFormat(sheet, rowIndex, column, '0.0%');
-      }
-    }
-
+    const { sheet, sheetName } = createWorksheetForReport(report, periods);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Отчёт');
+    XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
     const fileName = buildExportFileName(periods);
     XLSX.writeFile(workbook, fileName);
   } catch (error) {
     console.error('Не удалось выгрузить таблицу.', error);
     showPreviewMessage('Не удалось выгрузить таблицу. Повторите попытку.');
   }
+}
+
+function sanitizeWorksheetName(name) {
+  const fallback = 'Отчёт';
+  const raw = getValueAsString(name) || fallback;
+  const cleaned = raw.replace(/[\\/?*\[\]:]+/g, '_').trim();
+  if (!cleaned) {
+    return fallback;
+  }
+  if (cleaned.length > 31) {
+    return cleaned.slice(0, 31);
+  }
+  return cleaned;
 }
 
 /**
@@ -2959,8 +3969,8 @@ function mergeStyles(...styles) {
  *
  * @returns {string} Описание источника.
  */
-function describeSelectedDataSource() {
-  switch (state.dataSourceOption) {
+function describeSelectedDataSource(option = state.dataSourceOption) {
+  switch (option) {
     case 'oati':
       return 'Источник данных: ОАТИ';
     case 'cafap':
@@ -3074,3 +4084,5 @@ function buildExportFileName(periods) {
   const sanitized = `Отчёт ОАТИ ${start}_${end}.xlsx`.replace(/[\\/:*?"<>|]+/g, '_');
   return sanitized;
 }
+
+initializeBulkExportFeature();
