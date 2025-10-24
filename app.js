@@ -45,6 +45,8 @@ const TINAO_COMBINATION_KEYS = new Set([TINAO_AGGREGATED_KEY, 'нао', 'тао'
 const MAX_BULK_EXPORT_RULES = 20;
 const BULK_EXPORT_STORAGE_KEY = 'oati:bulk-export-rules';
 const BULK_EXPORT_PERIODS_STORAGE_KEY = 'oati:bulk-export-periods';
+const BULK_EXPORT_TEMPLATES_STORAGE_KEY = 'oati:bulk-export-templates';
+const SYSTEM_BULK_EXPORT_TEMPLATES = Object.freeze(createSystemBulkExportTemplates());
 
 const DISTRICT_SORT_ORDER = new Map([
   ['итого', 0],
@@ -142,6 +144,11 @@ const state = {
     previousEnd: '',
   },
   bulkExportSearch: {},
+  bulkExportTemplates: {
+    system: SYSTEM_BULK_EXPORT_TEMPLATES,
+    custom: [],
+    appliedTemplateId: null,
+  },
 };
 
 function resolveReportContext(overrides = {}) {
@@ -202,11 +209,13 @@ const elements = {
   bulkExportOverlay: document.getElementById('bulk-export-overlay'),
   bulkExportPanel: document.getElementById('bulk-export-panel'),
   closeBulkExportButton: document.getElementById('close-bulk-export'),
+  bulkExportTemplatesContainer: document.getElementById('bulk-export-templates'),
   bulkExportPeriodsContainer: document.getElementById('bulk-export-periods'),
   bulkExportPeriodsMessage: document.getElementById('bulk-export-periods-message'),
   bulkExportMessage: document.getElementById('bulk-export-message'),
   bulkExportRulesContainer: document.getElementById('bulk-export-rules'),
   addBulkExportRuleButton: document.getElementById('add-bulk-export-rule'),
+  saveBulkExportTemplateButton: document.getElementById('save-bulk-export-template'),
   runBulkExportButton: document.getElementById('run-bulk-export'),
 };
 
@@ -796,6 +805,12 @@ if (elements.bulkExportOverlay) {
 if (elements.addBulkExportRuleButton) {
   elements.addBulkExportRuleButton.addEventListener('click', () => {
     addBulkExportRule();
+  });
+}
+
+if (elements.saveBulkExportTemplateButton) {
+  elements.saveBulkExportTemplateButton.addEventListener('click', () => {
+    handleSaveBulkExportTemplate();
   });
 }
 
@@ -1597,6 +1612,198 @@ function generateBulkRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+function generateBulkTemplateId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `template-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function createSystemBulkExportTemplates() {
+  const roadType = 'ВК_Объекты дорожного хозяйства';
+  const yardType = 'ВК_Дворовые территории';
+  return [
+    {
+      id: 'system-vk-road',
+      name: roadType,
+      description:
+        'Набор для массовых выгрузок по объектам дорожного хозяйства: включает общее покрытие и акцент на ямах, бордюрном камне и уборке.',
+      rules: [
+        {
+          name: 'Правило 1. Все нарушения — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'all',
+          customViolations: [],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 2. Все нарушения — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'all',
+          customViolations: [],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 3. Ямы и выбоины — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: ['Ямы и выбоины в асфальтобетонном покрытии'],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 4. Ямы и выбоины — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: ['Ямы и выбоины в асфальтобетонном покрытии'],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 5. Бортовой камень — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: ['Отсутствует/повреждён бортовой камень'],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 6. Бортовой камень — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: ['Отсутствует/повреждён бортовой камень'],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 7. Неубранные объекты — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: [
+            'Не убран объект дорожного хозяйства',
+            'Не убран пешеходный переход',
+            'Не убрана дворовая территория',
+          ],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 8. Неубранные объекты — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [roadType],
+          violationMode: 'custom',
+          customViolations: [
+            'Не убран объект дорожного хозяйства',
+            'Не убран пешеходный переход',
+            'Не убрана дворовая территория',
+          ],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+      ],
+    },
+    {
+      id: 'system-vk-yard',
+      name: yardType,
+      description:
+        'Стандарт для дворовых территорий: сочетает общие показатели, работы по бортовому камню, ямочному ремонту и состоянию МАФов.',
+      rules: [
+        {
+          name: 'Правило 1. Все нарушения — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'all',
+          customViolations: [],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 2. Все нарушения — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'all',
+          customViolations: [],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 3. Бортовой камень — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: ['Отсутствует/повреждён бортовой камень'],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 4. Бортовой камень — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: ['Отсутствует/повреждён бортовой камень'],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 5. Ямы и выбоины — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: ['Ямы и выбоины в асфальтобетонном покрытии'],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 6. Ямы и выбоины — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: ['Ямы и выбоины в асфальтобетонном покрытии'],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 7. Неубранные объекты и МАФы — ОАТИ и ЦАФАП',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: [
+            'Не убран объект дорожного хозяйства',
+            'Не восстановлен демонтированный МАФ',
+            'Не убрана дворовая территория',
+          ],
+          dataSourceOption: 'all',
+          combineTiNaoDistricts: true,
+        },
+        {
+          name: 'Правило 8. Состояние МАФов — только ОАТИ',
+          typeMode: 'custom',
+          customTypes: [yardType],
+          violationMode: 'custom',
+          customViolations: [
+            'Грязный МАФ',
+            'Не убран пешеходный переход',
+            'Не окрашен МАФ',
+            'Сломан МАФ',
+            'Сломан МАФ (нарушение норм безопасности)',
+          ],
+          dataSourceOption: 'oati',
+          combineTiNaoDistricts: true,
+        },
+      ],
+    },
+  ];
+}
+
 function normalizeBulkExportPeriods(periods) {
   return {
     currentStart: typeof periods?.currentStart === 'string' ? periods.currentStart.trim() : '',
@@ -1604,6 +1811,38 @@ function normalizeBulkExportPeriods(periods) {
     previousStart: typeof periods?.previousStart === 'string' ? periods.previousStart.trim() : '',
     previousEnd: typeof periods?.previousEnd === 'string' ? periods.previousEnd.trim() : '',
   };
+}
+
+function normalizeBulkTemplateRule(rule, index = 0) {
+  const typeMode = rule?.typeMode === 'custom' ? 'custom' : 'all';
+  const violationMode = rule?.violationMode === 'custom' ? 'custom' : 'all';
+  const normalized = {
+    name: typeof rule?.name === 'string' ? rule.name.trim() : '',
+    typeMode,
+    customTypes: typeMode === 'custom' ? normalizeStringArray(rule?.customTypes ?? [], 3) : [],
+    violationMode,
+    customViolations:
+      violationMode === 'custom' ? normalizeStringArray(rule?.customViolations ?? [], 5) : [],
+    dataSourceOption: ['oati', 'cafap', 'all'].includes(rule?.dataSourceOption)
+      ? rule.dataSourceOption
+      : 'all',
+    combineTiNaoDistricts: Boolean(rule?.combineTiNaoDistricts),
+  };
+  if (!normalized.name) {
+    normalized.name = `Правило ${index + 1}`;
+  }
+  return normalized;
+}
+
+function normalizeBulkExportTemplate(template) {
+  const id = typeof template?.id === 'string' && template.id.trim() ? template.id.trim() : generateBulkTemplateId();
+  const name = typeof template?.name === 'string' ? template.name.trim() : '';
+  const description = typeof template?.description === 'string' ? template.description.trim() : '';
+  const rulesSource = Array.isArray(template?.rules) ? template.rules : [];
+  const rules = rulesSource.slice(0, MAX_BULK_EXPORT_RULES).map((rule, index) => ({
+    ...normalizeBulkTemplateRule(rule, index),
+  }));
+  return { id, name, description, rules };
 }
 
 function loadBulkExportRulesFromStorage() {
@@ -1622,6 +1861,26 @@ function loadBulkExportRulesFromStorage() {
     return parsed.slice(0, MAX_BULK_EXPORT_RULES).map((item) => normalizeBulkExportRule(item));
   } catch (error) {
     console.warn('Не удалось прочитать сохранённые правила массовой выгрузки.', error);
+    return [];
+  }
+}
+
+function loadCustomBulkExportTemplatesFromStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(BULK_EXPORT_TEMPLATES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((item, index) => normalizeBulkExportTemplate({ ...item, id: item?.id ?? `custom-${index}` }));
+  } catch (error) {
+    console.warn('Не удалось прочитать сохранённые шаблоны массовой выгрузки.', error);
     return [];
   }
 }
@@ -1664,6 +1923,18 @@ function saveBulkExportPeriodsToStorage() {
     window.localStorage.setItem(BULK_EXPORT_PERIODS_STORAGE_KEY, payload);
   } catch (error) {
     console.warn('Не удалось сохранить периоды массовой выгрузки.', error);
+  }
+}
+
+function saveCustomBulkExportTemplatesToStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  try {
+    const payload = JSON.stringify(state.bulkExportTemplates.custom.map((template) => normalizeBulkExportTemplate(template)));
+    window.localStorage.setItem(BULK_EXPORT_TEMPLATES_STORAGE_KEY, payload);
+  } catch (error) {
+    console.warn('Не удалось сохранить шаблоны массовой выгрузки.', error);
   }
 }
 
@@ -1721,6 +1992,22 @@ function normalizeBulkExportRule(rule) {
   };
 }
 
+function serializeRuleToTemplate(rule, index) {
+  const normalized = normalizeBulkExportRule(rule);
+  return normalizeBulkTemplateRule(
+    {
+      name: normalized.name,
+      typeMode: normalized.typeMode,
+      customTypes: normalized.customTypes,
+      violationMode: normalized.violationMode,
+      customViolations: normalized.customViolations,
+      dataSourceOption: normalized.dataSourceOption,
+      combineTiNaoDistricts: normalized.combineTiNaoDistricts,
+    },
+    index,
+  );
+}
+
 function getCurrentPeriodInputs() {
   return {
     currentStart: elements.currentStart?.value ?? '',
@@ -1751,6 +2038,7 @@ function addBulkExportRule() {
     setBulkExportMessage(`Можно создать не более ${MAX_BULK_EXPORT_RULES} правил.`);
     return;
   }
+  clearAppliedBulkTemplateTracking();
   const rule = createDefaultBulkExportRule();
   ensureBulkExportSearchState(rule.id);
   state.bulkExportRules = [...state.bulkExportRules, rule];
@@ -1764,6 +2052,7 @@ function deleteBulkExportRule(ruleId) {
   if (next.length === state.bulkExportRules.length) {
     return;
   }
+  clearAppliedBulkTemplateTracking();
   state.bulkExportRules = next;
   delete state.bulkExportSearch[ruleId];
   saveBulkExportRulesToStorage();
@@ -1787,6 +2076,7 @@ function updateBulkExportRule(ruleId, updater, options = {}) {
   if (!hasChanged) {
     return;
   }
+  clearAppliedBulkTemplateTracking();
   state.bulkExportRules = [
     ...state.bulkExportRules.slice(0, index),
     normalized,
@@ -1827,6 +2117,327 @@ function renderBulkExportRules() {
   if (elements.runBulkExportButton) {
     elements.runBulkExportButton.disabled = state.bulkExportRules.length === 0;
   }
+  updateBulkExportTemplateControls();
+}
+
+function renderBulkExportTemplates() {
+  const container = elements.bulkExportTemplatesContainer;
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+  const fieldset = document.createElement('fieldset');
+  fieldset.className = 'bulk-export-fieldset bulk-export-fieldset--templates';
+  const legend = document.createElement('legend');
+  legend.textContent = 'Шаблоны массовой выгрузки';
+  fieldset.append(legend);
+
+  const description = document.createElement('p');
+  description.className = 'bulk-export-note';
+  description.textContent =
+    'Выберите готовый набор фильтров или сохраните собственный шаблон, чтобы делиться настройками с коллегами.';
+  fieldset.append(description);
+
+  const groups = [
+    {
+      title: 'Системные шаблоны',
+      templates: state.bulkExportTemplates.system,
+      emptyText: 'Системные шаблоны временно недоступны.',
+      kind: 'system',
+    },
+    {
+      title: 'Мои шаблоны',
+      templates: state.bulkExportTemplates.custom,
+      emptyText: 'Сохраните собственный шаблон, чтобы использовать его повторно.',
+      kind: 'custom',
+    },
+  ];
+
+  groups.forEach((group) => {
+    const groupWrapper = document.createElement('section');
+    groupWrapper.className = 'bulk-export-template-group';
+
+    const title = document.createElement('h3');
+    title.className = 'bulk-export-template-group__title';
+    title.textContent = group.title;
+    groupWrapper.append(title);
+
+    if (!group.templates.length) {
+      const empty = document.createElement('p');
+      empty.className = 'bulk-export-template-empty';
+      empty.textContent = group.emptyText;
+      groupWrapper.append(empty);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'bulk-export-template-list';
+      group.templates.forEach((template) => {
+        list.append(createBulkExportTemplateCard(template, group.kind));
+      });
+      groupWrapper.append(list);
+    }
+
+    fieldset.append(groupWrapper);
+  });
+
+  container.append(fieldset);
+}
+
+function createBulkExportTemplateCard(template, kind) {
+  const card = document.createElement('article');
+  card.className = 'bulk-export-template-card';
+  if (state.bulkExportTemplates.appliedTemplateId === template.id) {
+    card.classList.add('bulk-export-template-card--active');
+  }
+
+  const header = document.createElement('div');
+  header.className = 'bulk-export-template-card__header';
+
+  const title = document.createElement('h4');
+  title.className = 'bulk-export-template-card__title';
+  title.textContent = template.name || 'Без названия';
+  header.append(title);
+
+  if (kind === 'system') {
+    const badge = document.createElement('span');
+    badge.className = 'bulk-export-template-card__badge';
+    badge.textContent = 'Системный шаблон';
+    header.append(badge);
+  }
+
+  card.append(header);
+
+  const summary = document.createElement('p');
+  summary.className = 'bulk-export-template-card__summary';
+  const ruleCount = template.rules.length;
+  summary.textContent =
+    template.description && template.description.trim().length
+      ? template.description
+      : `Содержит ${ruleCount} ${formatRuPlural(ruleCount, 'правило', 'правила', 'правил')}.`;
+  card.append(summary);
+
+  if (template.rules.length) {
+    const rulesList = document.createElement('ul');
+    rulesList.className = 'bulk-export-template-card__rules';
+    template.rules.forEach((rule, index) => {
+      const item = document.createElement('li');
+      item.className = 'bulk-export-template-card__rule';
+      const name = document.createElement('span');
+      name.className = 'bulk-export-template-card__rule-name';
+      name.textContent = rule.name || `Правило ${index + 1}`;
+      const details = document.createElement('p');
+      details.className = 'bulk-export-template-card__rule-summary';
+      details.textContent = formatBulkTemplateRuleSummary(rule);
+      item.append(name, details);
+      rulesList.append(item);
+    });
+    card.append(rulesList);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'bulk-export-template-card__actions';
+
+  const applyButton = document.createElement('button');
+  applyButton.type = 'button';
+  applyButton.className = 'bulk-export-template-card__apply';
+  const isActive = state.bulkExportTemplates.appliedTemplateId === template.id;
+  applyButton.textContent = isActive ? 'Применён' : 'Применить';
+  applyButton.disabled = isActive;
+  applyButton.addEventListener('click', () => {
+    applyBulkExportTemplate(template.id);
+  });
+  actions.append(applyButton);
+
+  if (kind === 'custom') {
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'bulk-export-template-card__delete';
+    deleteButton.textContent = 'Удалить';
+    deleteButton.addEventListener('click', () => {
+      deleteCustomBulkExportTemplate(template.id);
+    });
+    actions.append(deleteButton);
+  }
+
+  card.append(actions);
+
+  return card;
+}
+
+function formatBulkTemplateRuleSummary(rule) {
+  const typePart =
+    rule.typeMode === 'custom'
+      ? `Типы: ${rule.customTypes.join(', ')}`
+      : 'Типы: все';
+  const violationPart =
+    rule.violationMode === 'custom'
+      ? `Нарушения: ${rule.customViolations.join(', ')}`
+      : 'Нарушения: все';
+  let sourcePart = 'Источник: ОАТИ и ЦАФАП';
+  if (rule.dataSourceOption === 'oati') {
+    sourcePart = 'Источник: только ОАТИ';
+  } else if (rule.dataSourceOption === 'cafap') {
+    sourcePart = 'Источник: только ЦАФАП';
+  }
+  const tinaoPart = rule.combineTiNaoDistricts ? 'ТиНАО объединён' : 'ТиНАО отдельно';
+  return `${typePart} • ${violationPart} • ${sourcePart} • ${tinaoPart}`;
+}
+
+function updateBulkExportTemplateControls() {
+  if (elements.saveBulkExportTemplateButton) {
+    elements.saveBulkExportTemplateButton.disabled = state.bulkExportRules.length === 0;
+  }
+}
+
+function markAppliedBulkTemplate(templateId) {
+  state.bulkExportTemplates.appliedTemplateId = templateId ?? null;
+  renderBulkExportTemplates();
+}
+
+function clearAppliedBulkTemplateTracking() {
+  if (!state.bulkExportTemplates.appliedTemplateId) {
+    return;
+  }
+  state.bulkExportTemplates.appliedTemplateId = null;
+  const container = elements.bulkExportTemplatesContainer;
+  if (!container) {
+    return;
+  }
+  const activeCard = container.querySelector('.bulk-export-template-card--active');
+  if (activeCard) {
+    activeCard.classList.remove('bulk-export-template-card--active');
+  }
+  const activeButton = container.querySelector('.bulk-export-template-card__apply:disabled');
+  if (activeButton instanceof HTMLButtonElement) {
+    activeButton.disabled = false;
+    activeButton.textContent = 'Применить';
+  }
+}
+
+function applyBulkExportTemplate(templateId, options = {}) {
+  const { silent = false, force = false } = options;
+  const templates = [...state.bulkExportTemplates.system, ...state.bulkExportTemplates.custom];
+  const template = templates.find((item) => item.id === templateId);
+  if (!template) {
+    if (!silent) {
+      setBulkExportMessage('Не удалось применить шаблон: он не найден.');
+    }
+    return;
+  }
+  if (!force && state.bulkExportRules.length && !silent) {
+    const confirmation = window.confirm(
+      `Текущие правила массовой выгрузки будут заменены шаблоном «${template.name}». Продолжить?`,
+    );
+    if (!confirmation) {
+      return;
+    }
+  }
+  const periods = normalizeBulkExportPeriods(state.bulkExportPeriods);
+  const preparedRules = template.rules.map((rule, index) =>
+    normalizeBulkExportRule({
+      ...rule,
+      id: generateBulkRuleId(),
+      periods,
+    }),
+  );
+  state.bulkExportSearch = {};
+  state.bulkExportRules = preparedRules;
+  preparedRules.forEach((rule) => ensureBulkExportSearchState(rule.id));
+  saveBulkExportRulesToStorage();
+  markAppliedBulkTemplate(template.id);
+  renderBulkExportRules();
+  if (!silent) {
+    setBulkExportMessage(`Шаблон «${template.name}» применён. Проверьте параметры перед выгрузкой.`);
+  }
+}
+
+function handleSaveBulkExportTemplate() {
+  if (!state.bulkExportRules.length) {
+    setBulkExportMessage('Добавьте хотя бы одно правило, прежде чем сохранять шаблон.');
+    return;
+  }
+  const invalidRules = [];
+  state.bulkExportRules.forEach((rule, index) => {
+    const { errors } = validateBulkRule(rule);
+    if (errors.length) {
+      invalidRules.push(`Правило ${index + 1}: ${errors.join(', ')}`);
+    }
+  });
+  if (invalidRules.length) {
+    setBulkExportMessage(
+      `Не удалось сохранить шаблон: скорректируйте настройки. ${invalidRules.join('; ')}.`,
+    );
+    return;
+  }
+  const name = window.prompt('Введите название шаблона массовой выгрузки');
+  if (name === null) {
+    setBulkExportMessage('Сохранение шаблона отменено.');
+    return;
+  }
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    setBulkExportMessage('Укажите осмысленное название для шаблона.');
+    return;
+  }
+  const normalizedRules = state.bulkExportRules.map((rule, index) => serializeRuleToTemplate(rule, index));
+  const existingIndex = state.bulkExportTemplates.custom.findIndex(
+    (template) => normalizeKey(template.name) === normalizeKey(trimmedName),
+  );
+  if (existingIndex !== -1) {
+    const shouldReplace = window.confirm(
+      `Шаблон «${state.bulkExportTemplates.custom[existingIndex].name}» уже существует. Обновить его?`,
+    );
+    if (!shouldReplace) {
+      setBulkExportMessage('Сохранение шаблона отменено.');
+      return;
+    }
+    const existing = state.bulkExportTemplates.custom[existingIndex];
+    const updated = normalizeBulkExportTemplate({
+      ...existing,
+      name: trimmedName,
+      rules: normalizedRules,
+    });
+    state.bulkExportTemplates.custom = [
+      ...state.bulkExportTemplates.custom.slice(0, existingIndex),
+      { ...updated, id: existing.id },
+      ...state.bulkExportTemplates.custom.slice(existingIndex + 1),
+    ];
+    saveCustomBulkExportTemplatesToStorage();
+    markAppliedBulkTemplate(existing.id);
+    setBulkExportMessage(`Шаблон «${trimmedName}» обновлён и доступен всем пользователям этого устройства.`);
+    return;
+  }
+  const template = normalizeBulkExportTemplate({
+    id: generateBulkTemplateId(),
+    name: trimmedName,
+    rules: normalizedRules,
+  });
+  state.bulkExportTemplates.custom = [...state.bulkExportTemplates.custom, template];
+  saveCustomBulkExportTemplatesToStorage();
+  markAppliedBulkTemplate(template.id);
+  setBulkExportMessage(`Шаблон «${trimmedName}» сохранён и добавлен к списку доступных.`);
+}
+
+function deleteCustomBulkExportTemplate(templateId) {
+  const index = state.bulkExportTemplates.custom.findIndex((template) => template.id === templateId);
+  if (index === -1) {
+    setBulkExportMessage('Не удалось найти шаблон для удаления.');
+    return;
+  }
+  const template = state.bulkExportTemplates.custom[index];
+  const confirmed = window.confirm(`Удалить шаблон «${template.name}»?`);
+  if (!confirmed) {
+    return;
+  }
+  state.bulkExportTemplates.custom = [
+    ...state.bulkExportTemplates.custom.slice(0, index),
+    ...state.bulkExportTemplates.custom.slice(index + 1),
+  ];
+  saveCustomBulkExportTemplatesToStorage();
+  if (state.bulkExportTemplates.appliedTemplateId === templateId) {
+    state.bulkExportTemplates.appliedTemplateId = null;
+  }
+  renderBulkExportTemplates();
+  setBulkExportMessage(`Шаблон «${template.name}» удалён.`);
 }
 
 function createBulkExportRuleElement(rule, index) {
@@ -2666,10 +3277,24 @@ function buildBulkExportFileName() {
 
 function initializeBulkExportFeature() {
   state.bulkExportSearch = {};
-  state.bulkExportRules = loadBulkExportRulesFromStorage();
+  state.bulkExportTemplates = {
+    system: SYSTEM_BULK_EXPORT_TEMPLATES,
+    custom: loadCustomBulkExportTemplatesFromStorage(),
+    appliedTemplateId: null,
+  };
+  const storedRules = loadBulkExportRulesFromStorage();
+  state.bulkExportRules = storedRules;
   state.bulkExportPeriods = loadBulkExportPeriodsFromStorage();
-  state.bulkExportRules.forEach((rule) => ensureBulkExportSearchState(rule.id));
-  renderBulkExportRules();
+  if (state.bulkExportRules.length) {
+    state.bulkExportRules.forEach((rule) => ensureBulkExportSearchState(rule.id));
+    renderBulkExportRules();
+    renderBulkExportTemplates();
+  } else if (state.bulkExportTemplates.system.length) {
+    applyBulkExportTemplate(state.bulkExportTemplates.system[0].id, { silent: true, force: true });
+  } else {
+    renderBulkExportRules();
+    renderBulkExportTemplates();
+  }
   syncBulkExportPeriodsWithAvailability();
   if (elements.bulkExportOverlay) {
     elements.bulkExportOverlay.hidden = true;
