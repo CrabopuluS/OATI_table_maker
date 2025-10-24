@@ -1942,7 +1942,6 @@ function createSharedDateInput(key, label) {
     input.min = availableRange.min;
     input.max = availableRange.max;
   }
-  input.disabled = !state.availableDates.length;
   input.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
