@@ -1644,6 +1644,35 @@ body.theme-dark .bulk-export-overlay {
   color: var(--text-secondary);
 }
 
+.bulk-export-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bulk-export-period-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.bulk-export-period-group__title {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bulk-export-date-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.bulk-export-date-input input[type='date'] {
+  color: var(--text-primary);
+}
+
 .bulk-export-message {
   min-height: 1.1rem;
   font-size: 0.95rem;

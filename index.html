@@ -363,9 +363,16 @@
             </button>
           </div>
           <p class="bulk-export-panel__description">
-            Создайте до восьми правил массовой выгрузки и заранее настройте период, источники данных и фильтры.
-            Во время экспорта каждое правило формирует отдельный лист Excel, а все отчёты сохраняются в одном файле.
+            Создайте до двадцати правил массовой выгрузки с индивидуальными фильтрами. Даты отчётных периодов выбираются один
+            раз и применяются ко всем правилам, а каждый отчёт формируется на отдельном листе Excel в составе одного файла.
           </p>
+          <div id="bulk-export-periods" class="bulk-export-periods"></div>
+          <p
+            id="bulk-export-periods-message"
+            class="bulk-export-note"
+            role="status"
+            aria-live="polite"
+          ></p>
           <div id="bulk-export-message" class="bulk-export-message" role="status" aria-live="polite"></div>
           <div id="bulk-export-rules" class="bulk-export-rules" aria-live="polite"></div>
           <div class="bulk-export-actions">

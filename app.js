@@ -42,8 +42,9 @@ const TINAO_DISPLAY_LABEL = 'ТиНАО';
 const TINAO_AGGREGATED_KEY = 'тинао';
 const TINAO_COMBINATION_KEYS = new Set([TINAO_AGGREGATED_KEY, 'нао', 'тао']);
 
-const MAX_BULK_EXPORT_RULES = 8;
+const MAX_BULK_EXPORT_RULES = 20;
 const BULK_EXPORT_STORAGE_KEY = 'oati:bulk-export-rules';
+const BULK_EXPORT_PERIODS_STORAGE_KEY = 'oati:bulk-export-periods';
 
 const DISTRICT_SORT_ORDER = new Map([
   ['итого', 0],
@@ -134,6 +135,12 @@ const state = {
   dataSourceOption: 'all',
   combineTiNaoDistricts: false,
   bulkExportRules: [],
+  bulkExportPeriods: {
+    currentStart: '',
+    currentEnd: '',
+    previousStart: '',
+    previousEnd: '',
+  },
 };
 
 function resolveReportContext(overrides = {}) {
@@ -194,6 +201,8 @@ const elements = {
   bulkExportOverlay: document.getElementById('bulk-export-overlay'),
   bulkExportPanel: document.getElementById('bulk-export-panel'),
   closeBulkExportButton: document.getElementById('close-bulk-export'),
+  bulkExportPeriodsContainer: document.getElementById('bulk-export-periods'),
+  bulkExportPeriodsMessage: document.getElementById('bulk-export-periods-message'),
   bulkExportMessage: document.getElementById('bulk-export-message'),
   bulkExportRulesContainer: document.getElementById('bulk-export-rules'),
   addBulkExportRuleButton: document.getElementById('add-bulk-export-rule'),
@@ -769,7 +778,8 @@ if (elements.openBulkExportButton) {
 }
 
 if (elements.closeBulkExportButton) {
-  elements.closeBulkExportButton.addEventListener('click', () => {
+  elements.closeBulkExportButton.addEventListener('click', (event) => {
+    event.preventDefault();
     closeBulkExportOverlay();
   });
 }
@@ -1586,6 +1596,15 @@ function generateBulkRuleId() {
   return `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+function normalizeBulkExportPeriods(periods) {
+  return {
+    currentStart: typeof periods?.currentStart === 'string' ? periods.currentStart.trim() : '',
+    currentEnd: typeof periods?.currentEnd === 'string' ? periods.currentEnd.trim() : '',
+    previousStart: typeof periods?.previousStart === 'string' ? periods.previousStart.trim() : '',
+    previousEnd: typeof periods?.previousEnd === 'string' ? periods.previousEnd.trim() : '',
+  };
+}
+
 function loadBulkExportRulesFromStorage() {
   if (typeof window === 'undefined' || !window.localStorage) {
     return [];
@@ -1606,6 +1625,23 @@ function loadBulkExportRulesFromStorage() {
   }
 }
 
+function loadBulkExportPeriodsFromStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+  }
+  try {
+    const raw = window.localStorage.getItem(BULK_EXPORT_PERIODS_STORAGE_KEY);
+    if (!raw) {
+      return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+    }
+    const parsed = JSON.parse(raw);
+    return normalizeBulkExportPeriods(parsed);
+  } catch (error) {
+    console.warn('Не удалось прочитать сохранённые периоды массовой выгрузки.', error);
+    return normalizeBulkExportPeriods(getCurrentPeriodInputs());
+  }
+}
+
 function saveBulkExportRulesToStorage() {
   if (typeof window === 'undefined' || !window.localStorage) {
     return;
@@ -1615,6 +1651,18 @@ function saveBulkExportRulesToStorage() {
     window.localStorage.setItem(BULK_EXPORT_STORAGE_KEY, payload);
   } catch (error) {
     console.warn('Не удалось сохранить правила массовой выгрузки.', error);
+  }
+}
+
+function saveBulkExportPeriodsToStorage() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+  try {
+    const payload = JSON.stringify(normalizeBulkExportPeriods(state.bulkExportPeriods));
+    window.localStorage.setItem(BULK_EXPORT_PERIODS_STORAGE_KEY, payload);
+  } catch (error) {
+    console.warn('Не удалось сохранить периоды массовой выгрузки.', error);
   }
 }
 
@@ -1683,7 +1731,7 @@ function getCurrentPeriodInputs() {
 
 function createDefaultBulkExportRule() {
   const context = resolveReportContext();
-  const periods = getCurrentPeriodInputs();
+  const periods = normalizeBulkExportPeriods(state.bulkExportPeriods);
   return normalizeBulkExportRule({
     id: generateBulkRuleId(),
     name: `Правило ${state.bulkExportRules.length + 1}`,
@@ -1817,7 +1865,6 @@ function createBulkExportRuleElement(rule, index) {
   const grid = document.createElement('div');
   grid.className = 'bulk-export-rule__grid';
 
-  grid.append(createPeriodFieldset(rule));
   grid.append(createTypeFieldset(rule));
   grid.append(createViolationFieldset(rule));
   grid.append(createAdditionalFieldset(rule));
@@ -1835,66 +1882,178 @@ function createBulkExportRuleElement(rule, index) {
   return wrapper;
 }
 
-function createPeriodFieldset(rule) {
+function renderBulkExportSharedPeriods() {
+  const container = elements.bulkExportPeriodsContainer;
+  if (!container) {
+    return;
+  }
+  container.innerHTML = '';
+
   const fieldset = document.createElement('fieldset');
   fieldset.className = 'bulk-export-fieldset';
   const legend = document.createElement('legend');
-  legend.textContent = 'Периоды';
+  legend.textContent = 'Периоды для массовой выгрузки';
   fieldset.append(legend);
 
-  const currentLabel = document.createElement('label');
-  const currentLabelText = document.createElement('span');
-  currentLabelText.textContent = 'Отчётный период';
-  currentLabel.append(currentLabelText);
-  const currentInputs = document.createElement('div');
-  currentInputs.className = 'bulk-export-date-inputs';
-  currentInputs.append(
-    createDateInput(rule, 'currentStart', 'Начало', rule.periods.currentStart),
-    createDateInput(rule, 'currentEnd', 'Окончание', rule.periods.currentEnd),
-  );
-  currentLabel.append(currentInputs);
+  fieldset.append(createSharedPeriodGroup('current', 'Отчётный период'));
+  fieldset.append(createSharedPeriodGroup('previous', 'Предыдущий период'));
 
-  const previousLabel = document.createElement('label');
-  const previousLabelText = document.createElement('span');
-  previousLabelText.textContent = 'Предыдущий период';
-  previousLabel.append(previousLabelText);
-  const previousInputs = document.createElement('div');
-  previousInputs.className = 'bulk-export-date-inputs';
-  previousInputs.append(
-    createDateInput(rule, 'previousStart', 'Начало', rule.periods.previousStart),
-    createDateInput(rule, 'previousEnd', 'Окончание', rule.periods.previousEnd),
-  );
-  previousLabel.append(previousInputs);
+  container.append(fieldset);
 
-  fieldset.append(currentLabel, previousLabel);
-  return fieldset;
+  if (elements.bulkExportPeriodsMessage) {
+    const issues = collectBulkPeriodsIssues(state.bulkExportPeriods);
+    elements.bulkExportPeriodsMessage.textContent = issues.join(' ');
+  }
 }
 
-function createDateInput(rule, key, label, value) {
+function createSharedPeriodGroup(prefix, title) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'bulk-export-period-group';
+
+  const groupTitle = document.createElement('span');
+  groupTitle.className = 'bulk-export-period-group__title';
+  groupTitle.textContent = title;
+  wrapper.append(groupTitle);
+
+  const inputs = document.createElement('div');
+  inputs.className = 'bulk-export-date-inputs';
+  inputs.append(
+    createSharedDateInput(`${prefix}Start`, 'Начало'),
+    createSharedDateInput(`${prefix}End`, 'Окончание'),
+  );
+  wrapper.append(inputs);
+
+  return wrapper;
+}
+
+function createSharedDateInput(key, label) {
   const wrapper = document.createElement('label');
-  wrapper.textContent = label;
+  wrapper.className = 'bulk-export-date-input';
+
+  const text = document.createElement('span');
+  text.textContent = label;
+  wrapper.append(text);
+
   const input = document.createElement('input');
   input.type = 'date';
-  input.value = value ?? '';
+  input.value = state.bulkExportPeriods[key] ?? '';
   const availableRange = deriveAvailableDateRange();
   if (availableRange) {
     input.min = availableRange.min;
     input.max = availableRange.max;
   }
+  input.disabled = !state.availableDates.length;
   input.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
       return;
     }
-    updateBulkExportRule(rule.id, {
-      periods: {
-        ...rule.periods,
-        [key]: target.value,
-      },
-    });
+    updateBulkExportPeriods({ [key]: target.value });
   });
   wrapper.append(input);
   return wrapper;
+}
+
+function updateBulkExportPeriods(changes) {
+  const next = normalizeBulkExportPeriods({
+    ...state.bulkExportPeriods,
+    ...changes,
+  });
+  if (JSON.stringify(next) === JSON.stringify(state.bulkExportPeriods)) {
+    return;
+  }
+  state.bulkExportPeriods = next;
+  saveBulkExportPeriodsToStorage();
+  if (elements.bulkExportPeriodsMessage) {
+    const issues = collectBulkPeriodsIssues(state.bulkExportPeriods);
+    elements.bulkExportPeriodsMessage.textContent = issues.join(' ');
+  }
+}
+
+function collectBulkPeriodsIssues(periods) {
+  const issues = [];
+  if (!state.availableDates.length) {
+    issues.push('Загрузите данные и сопоставьте колонку «Дата обследования», чтобы выбрать периоды для массовой выгрузки.');
+    return issues;
+  }
+  const normalized = normalizeBulkExportPeriods(periods);
+  const currentStart = parseIsoDate(normalized.currentStart);
+  const currentEnd = parseIsoDate(normalized.currentEnd);
+  if (!currentStart || !currentEnd) {
+    issues.push('Укажите даты начала и окончания отчётного периода.');
+  } else if (currentStart > currentEnd) {
+    issues.push('Дата начала отчётного периода не может быть позже даты окончания.');
+  }
+  const previousStart = parseIsoDate(normalized.previousStart);
+  const previousEnd = parseIsoDate(normalized.previousEnd);
+  if (!previousStart || !previousEnd) {
+    issues.push('Заполните предыдущий период.');
+  } else if (previousStart > previousEnd) {
+    issues.push('Дата начала предыдущего периода не может быть позже даты окончания.');
+  }
+  return issues;
+}
+
+function validateBulkPeriods(periods) {
+  const errors = [];
+  const normalized = normalizeBulkExportPeriods(periods);
+  const currentStart = parseIsoDate(normalized.currentStart);
+  const currentEnd = parseIsoDate(normalized.currentEnd);
+  if (!currentStart || !currentEnd) {
+    errors.push('не заполнен отчётный период');
+  } else if (currentStart > currentEnd) {
+    errors.push('отчётный период указан некорректно');
+  }
+  const previousStart = parseIsoDate(normalized.previousStart);
+  const previousEnd = parseIsoDate(normalized.previousEnd);
+  if (!previousStart || !previousEnd) {
+    errors.push('не заполнен предыдущий период');
+  } else if (previousStart > previousEnd) {
+    errors.push('предыдущий период указан некорректно');
+  }
+  const result =
+    !errors.length && currentStart && currentEnd && previousStart && previousEnd
+      ? {
+          current: { start: currentStart, end: currentEnd },
+          previous: { start: previousStart, end: previousEnd },
+        }
+      : null;
+  return { periods: result, errors };
+}
+
+function syncBulkExportPeriodsWithAvailability() {
+  const normalized = normalizeBulkExportPeriods(state.bulkExportPeriods);
+  let next = { ...normalized };
+  let changed = false;
+  if (!state.availableDates.length) {
+    if (Object.values(next).some(Boolean)) {
+      next = {
+        currentStart: '',
+        currentEnd: '',
+        previousStart: '',
+        previousEnd: '',
+      };
+      changed = true;
+    }
+  } else {
+    const range = deriveAvailableDateRange();
+    if (range) {
+      for (const key of ['currentStart', 'currentEnd', 'previousStart', 'previousEnd']) {
+        const value = next[key];
+        if (value && (value < range.min || value > range.max)) {
+          next[key] = '';
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    state.bulkExportPeriods = next;
+    saveBulkExportPeriodsToStorage();
+  } else {
+    state.bulkExportPeriods = normalized;
+  }
+  renderBulkExportSharedPeriods();
 }
 
 function deriveAvailableDateRange() {
@@ -2164,28 +2323,6 @@ function createAdditionalFieldset(rule) {
 
 function collectBulkRuleIssues(rule) {
   const issues = [];
-  if (!rule.periods.currentStart || !rule.periods.currentEnd) {
-    issues.push('Укажите даты начала и окончания отчётного периода.');
-  } else {
-    const start = parseIsoDate(rule.periods.currentStart);
-    const end = parseIsoDate(rule.periods.currentEnd);
-    if (!start || !end) {
-      issues.push('Отчётный период содержит некорректные даты.');
-    } else if (start > end) {
-      issues.push('Дата начала отчётного периода не может быть позже даты окончания.');
-    }
-  }
-  if (!rule.periods.previousStart || !rule.periods.previousEnd) {
-    issues.push('Заполните предыдущий период.');
-  } else {
-    const start = parseIsoDate(rule.periods.previousStart);
-    const end = parseIsoDate(rule.periods.previousEnd);
-    if (!start || !end) {
-      issues.push('Предыдущий период содержит некорректные даты.');
-    } else if (start > end) {
-      issues.push('Дата начала предыдущего периода не может быть позже даты окончания.');
-    }
-  }
   if (rule.typeMode === 'custom' && !rule.customTypes.length) {
     issues.push('Выберите типы объектов или переключитесь на использование всех типов.');
   }
@@ -2200,31 +2337,16 @@ function collectBulkRuleIssues(rule) {
 
 function validateBulkRule(rule) {
   const errors = [];
-  const currentStart = parseIsoDate(rule.periods.currentStart);
-  const currentEnd = parseIsoDate(rule.periods.currentEnd);
-  const previousStart = parseIsoDate(rule.periods.previousStart);
-  const previousEnd = parseIsoDate(rule.periods.previousEnd);
-  if (!currentStart || !currentEnd) {
-    errors.push('не заполнен отчётный период');
-  } else if (currentStart > currentEnd) {
-    errors.push('отчётный период указан некорректно');
-  }
-  if (!previousStart || !previousEnd) {
-    errors.push('не заполнен предыдущий период');
-  } else if (previousStart > previousEnd) {
-    errors.push('предыдущий период указан некорректно');
-  }
   if (rule.typeMode === 'custom' && !rule.customTypes.length) {
     errors.push('не выбраны типы объектов для фильтра');
   }
   if (rule.violationMode === 'custom' && !rule.customViolations.length) {
     errors.push('не выбраны наименования нарушений для фильтра');
   }
-  const periods =
-    !errors.length && currentStart && currentEnd && previousStart && previousEnd
-      ? { current: { start: currentStart, end: currentEnd }, previous: { start: previousStart, end: previousEnd } }
-      : null;
-  return { periods, errors };
+  if (!state.violationMapping.dataSource && rule.dataSourceOption !== 'all') {
+    errors.push('фильтр по источнику данных станет доступен после сопоставления колонки «Источник данных»');
+  }
+  return { errors };
 }
 
 function syncBulkExportRulesWithAvailableOptions() {
@@ -2249,8 +2371,9 @@ function syncBulkExportRulesWithAvailableOptions() {
   if (changed) {
     state.bulkExportRules = next;
     saveBulkExportRulesToStorage();
-    renderBulkExportRules();
   }
+  renderBulkExportRules();
+  syncBulkExportPeriodsWithAvailability();
 }
 
 function openBulkExportOverlay() {
@@ -2260,6 +2383,7 @@ function openBulkExportOverlay() {
   elements.bulkExportOverlay.hidden = false;
   document.body.classList.add('no-scroll');
   setBulkExportMessage('');
+  renderBulkExportSharedPeriods();
   renderBulkExportRules();
   if (elements.bulkExportPanel) {
     elements.bulkExportPanel.focus();
@@ -2303,11 +2427,17 @@ function handleBulkExportDownload() {
     setBulkExportMessage('Проверьте настройки соответствия столбцов перед массовой выгрузкой.');
     return;
   }
+  const { periods, errors: periodErrors } = validateBulkPeriods(state.bulkExportPeriods);
+  if (!periods || periodErrors.length) {
+    setBulkExportMessage(`Не удалось подготовить массовую выгрузку: ${periodErrors.join(', ')}.`);
+    renderBulkExportSharedPeriods();
+    return;
+  }
   const problems = [];
   const prepared = [];
   state.bulkExportRules.forEach((rule, index) => {
-    const { periods, errors } = validateBulkRule(rule);
-    if (errors.length || !periods) {
+    const { errors } = validateBulkRule(rule);
+    if (errors.length) {
       const ruleName = rule.name || `Правило ${index + 1}`;
       problems.push(`${ruleName}: ${errors.join(', ')}`);
       return;
@@ -2360,7 +2490,15 @@ function buildBulkExportFileName() {
 
 function initializeBulkExportFeature() {
   state.bulkExportRules = loadBulkExportRulesFromStorage();
+  state.bulkExportPeriods = loadBulkExportPeriodsFromStorage();
   renderBulkExportRules();
+  syncBulkExportPeriodsWithAvailability();
+  if (elements.bulkExportOverlay) {
+    elements.bulkExportOverlay.hidden = true;
+  }
+  if (document.body) {
+    document.body.classList.remove('no-scroll');
+  }
 }
 
 /**
